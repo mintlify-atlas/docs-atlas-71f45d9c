@@ -1,0 +1,909 @@
+---
+title: "PROJEIC GraphQL mutations reference"
+description: "Complete reference for all PROJEIC GraphQL mutations — create and manage projects, tasks, sprints, boards, members, and notifications."
+---
+
+PROJEIC mutations allow you to create, update, and delete resources across every domain in the platform. All mutations are sent as `POST` requests to `/projeic/api/graphql` with an `Authorization: Bearer <jwt>` header. The sections below document every available mutation, its input fields, return type, and a usage example. See the [API overview](/api/overview) for request format details.
+
+---
+
+## Projects
+
+### `createProject`
+
+Creates a new project and adds the authenticated user as its leader.
+
+```graphql
+mutation CreateProject($input: CreateProjectInput!) {
+  createProject(input: $input) {
+    id
+    name
+    status
+    methodology
+    color
+    isPublic
+    createdAt
+  }
+}
+```
+
+**Input: `CreateProjectInput!`**
+
+<ParamField body="name" type="string" required>
+  Project display name (3–100 characters).
+</ParamField>
+<ParamField body="description" type="string">
+  Optional project description (max 500 characters).
+</ParamField>
+<ParamField body="color" type="string" default="#3B82F6">
+  Hex color used for UI theming (e.g. `#3B82F6`).
+</ParamField>
+<ParamField body="methodology" type="ProjectMethodology" default="KANBAN">
+  Development methodology: `KANBAN`, `SCRUM`, `SCRUMBAN`, or `NONE`.
+</ParamField>
+<ParamField body="mode" type="ProjectMode">
+  Management mode: `CLASSIC` or `HYBRID`.
+</ParamField>
+<ParamField body="status" type="ProjectStatus" default="ACTIVE">
+  Initial lifecycle status: `ACTIVE`, `STARTING`, `ON_HOLD`, `COMPLETED`, or `CANCELLED`.
+</ParamField>
+<ParamField body="isPublic" type="boolean" default="false">
+  Make the project visible to all users.
+</ParamField>
+<ParamField body="isInstitutional" type="boolean">
+  Mark the project as institutional.
+</ParamField>
+<ParamField body="professorId" type="string">
+  Associate the project with a professor by user ID.
+</ParamField>
+<ParamField body="subjectId" type="string">
+  Associate the project with a subject by ID.
+</ParamField>
+
+**Returns:** `ProjectEntity!`
+
+---
+
+### `updateProject`
+
+Updates fields on an existing project. Only the `id` field is required; all other fields are optional.
+
+```graphql
+mutation UpdateProject($input: UpdateProjectInput!) {
+  updateProject(input: $input) {
+    id
+    name
+    status
+    methodology
+    updatedAt
+  }
+}
+```
+
+**Input: `UpdateProjectInput!`**
+
+<ParamField body="id" type="ID" required>
+  ID of the project to update.
+</ParamField>
+<ParamField body="name" type="string">
+  New display name.
+</ParamField>
+<ParamField body="description" type="string">
+  New description.
+</ParamField>
+<ParamField body="color" type="string">
+  New hex color.
+</ParamField>
+<ParamField body="methodology" type="ProjectMethodology" default="KANBAN">
+  Updated methodology.
+</ParamField>
+<ParamField body="mode" type="ProjectMode">
+  Updated management mode.
+</ParamField>
+<ParamField body="status" type="ProjectStatus" default="ACTIVE">
+  Updated lifecycle status.
+</ParamField>
+<ParamField body="isPublic" type="boolean">
+  Update visibility.
+</ParamField>
+<ParamField body="isInstitutional" type="boolean">
+  Update institutional flag.
+</ParamField>
+<ParamField body="professorId" type="string">
+  Reassign the associated professor.
+</ParamField>
+<ParamField body="subjectId" type="string">
+  Reassign the associated subject.
+</ParamField>
+<ParamField body="assignMeAsLeader" type="boolean">
+  When `true`, assigns the authenticated user as project leader.
+</ParamField>
+
+**Returns:** `ProjectEntity!`
+
+---
+
+### `archiveProject`
+
+Soft-deletes a project by setting its `isArchived` flag to `true`. The project remains in the database and can be included in queries by passing `includeArchived: true`.
+
+```graphql
+mutation ArchiveProject($id: ID!) {
+  archiveProject(id: $id) {
+    id
+    name
+    isArchived
+  }
+}
+```
+
+<ParamField body="id" type="ID" required>
+  ID of the project to archive.
+</ParamField>
+
+**Returns:** `ProjectEntity!`
+
+---
+
+### `deleteProject`
+
+Permanently deletes a project and all its associated data via cascading delete. This action is irreversible.
+
+<Warning>
+  `deleteProject` permanently removes the project and all related tasks, sprints, boards, members, and activity logs. There is no recovery path.
+</Warning>
+
+```graphql
+mutation DeleteProject($id: ID!) {
+  deleteProject(id: $id) {
+    id
+    name
+  }
+}
+```
+
+<ParamField body="id" type="ID" required>
+  ID of the project to permanently delete.
+</ParamField>
+
+**Returns:** `ProjectEntity!`
+
+---
+
+## Tasks
+
+### `createTask`
+
+Creates a new task within a project.
+
+```graphql
+mutation CreateTask($input: CreateTaskInput!) {
+  createTask(createTaskInput: $input) {
+    id
+    title
+    status
+    priority
+    boardId
+    sprintId
+    assigneeId
+    projectId
+    createdAt
+  }
+}
+```
+
+**Input: `CreateTaskInput!`**
+
+<ParamField body="title" type="string" required>
+  Task title.
+</ParamField>
+<ParamField body="projectId" type="string" required>
+  The project this task belongs to.
+</ParamField>
+<ParamField body="creatorId" type="string" required>
+  ID of the user creating the task.
+</ParamField>
+<ParamField body="description" type="string">
+  Optional task description.
+</ParamField>
+<ParamField body="assigneeId" type="string">
+  ID of the user to assign the task to.
+</ParamField>
+<ParamField body="boardId" type="string">
+  ID of the board column to place the task in.
+</ParamField>
+<ParamField body="sprintId" type="string">
+  ID of the sprint to associate the task with.
+</ParamField>
+<ParamField body="expectedResultId" type="string">
+  Link the task to an expected result.
+</ParamField>
+<ParamField body="priority" type="string">
+  Task priority (e.g. `HIGH`, `MEDIUM`, `LOW`).
+</ParamField>
+<ParamField body="startDate" type="DateTime">
+  Planned start date (ISO 8601).
+</ParamField>
+<ParamField body="dueDate" type="DateTime">
+  Due date (ISO 8601).
+</ParamField>
+<ParamField body="tags" type="string[]">
+  Array of tag strings.
+</ParamField>
+
+**Returns:** `Task!`
+
+---
+
+### `updateTask`
+
+Updates fields on an existing task. Only the `id` field is required; all other fields are optional.
+
+```graphql
+mutation UpdateTask($input: UpdateTaskInput!) {
+  updateTask(updateTaskInput: $input) {
+    id
+    title
+    status
+    priority
+    boardId
+    sprintId
+    position
+    updatedAt
+  }
+}
+```
+
+**Input: `UpdateTaskInput!`**
+
+<ParamField body="id" type="ID" required>
+  ID of the task to update.
+</ParamField>
+<ParamField body="title" type="string">
+  Updated title.
+</ParamField>
+<ParamField body="description" type="string">
+  Updated description.
+</ParamField>
+<ParamField body="status" type="string">
+  Updated status string.
+</ParamField>
+<ParamField body="priority" type="string">
+  Updated priority.
+</ParamField>
+<ParamField body="assigneeId" type="string">
+  Reassign the task to a different user.
+</ParamField>
+<ParamField body="boardId" type="string">
+  Move the task to a different board column.
+</ParamField>
+<ParamField body="sprintId" type="string">
+  Move the task to a different sprint.
+</ParamField>
+<ParamField body="position" type="number">
+  Updated position within the board column.
+</ParamField>
+<ParamField body="startDate" type="DateTime">
+  Updated start date.
+</ParamField>
+<ParamField body="dueDate" type="DateTime">
+  Updated due date.
+</ParamField>
+
+**Returns:** `Task!`
+
+---
+
+### `removeTask`
+
+Permanently deletes a task by ID.
+
+```graphql
+mutation RemoveTask($id: String!) {
+  removeTask(id: $id) {
+    id
+    title
+  }
+}
+```
+
+<ParamField body="id" type="string" required>
+  ID of the task to delete.
+</ParamField>
+
+**Returns:** `Task!`
+
+---
+
+## Sprints
+
+### `createSprint`
+
+Creates a new sprint within a project.
+
+```graphql
+mutation CreateSprint($input: CreateSprintInput!) {
+  createSprint(input: $input) {
+    id
+    name
+    goal
+    status
+    startDate
+    endDate
+    projectId
+  }
+}
+```
+
+**Input: `CreateSprintInput!`**
+
+<ParamField body="name" type="string" required>
+  Sprint display name.
+</ParamField>
+<ParamField body="projectId" type="string" required>
+  The project this sprint belongs to.
+</ParamField>
+<ParamField body="goal" type="string">
+  Sprint goal description.
+</ParamField>
+<ParamField body="startDate" type="DateTime">
+  Planned start date (ISO 8601).
+</ParamField>
+<ParamField body="endDate" type="DateTime">
+  Planned end date (ISO 8601).
+</ParamField>
+
+**Returns:** `Sprint!`
+
+---
+
+### `startSprint`
+
+Transitions a sprint to the active state.
+
+```graphql
+mutation StartSprint($id: String!, $projectId: String!) {
+  startSprint(id: $id, projectId: $projectId) {
+    id
+    name
+    status
+    startDate
+  }
+}
+```
+
+<ParamField body="id" type="string" required>
+  ID of the sprint to start.
+</ParamField>
+<ParamField body="projectId" type="string" required>
+  ID of the project the sprint belongs to.
+</ParamField>
+
+**Returns:** `Sprint!`
+
+---
+
+### `completeSprint`
+
+Marks a sprint as completed.
+
+```graphql
+mutation CompleteSprint($id: String!) {
+  completeSprint(id: $id) {
+    id
+    name
+    status
+    endDate
+  }
+}
+```
+
+<ParamField body="id" type="string" required>
+  ID of the sprint to complete.
+</ParamField>
+
+**Returns:** `Sprint!`
+
+---
+
+## Boards
+
+### `createBoard`
+
+Creates a new Kanban board column within a project.
+
+```graphql
+mutation CreateBoard($input: CreateBoardInput!) {
+  createBoard(createBoardInput: $input) {
+    id
+    name
+    color
+    position
+    wipLimit
+    projectId
+  }
+}
+```
+
+**Input: `CreateBoardInput!`**
+
+<ParamField body="name" type="string" required>
+  Column display name.
+</ParamField>
+<ParamField body="projectId" type="string" required>
+  The project this board column belongs to.
+</ParamField>
+<ParamField body="color" type="string">
+  Hex color for the column header.
+</ParamField>
+<ParamField body="position" type="number">
+  Sort order of the column.
+</ParamField>
+<ParamField body="wipLimit" type="number">
+  Work-in-progress limit for the column.
+</ParamField>
+
+**Returns:** `Board!`
+
+---
+
+### `createDefaultBoards`
+
+Creates a standard set of Kanban board columns for a project (e.g. To Do, In Progress, Done).
+
+```graphql
+mutation CreateDefaultBoards($projectId: String!) {
+  createDefaultBoards(projectId: $projectId) {
+    id
+    name
+    position
+    projectId
+  }
+}
+```
+
+<ParamField body="projectId" type="string" required>
+  The project to create default boards for.
+</ParamField>
+
+**Returns:** `[Board!]!`
+
+---
+
+### `updateBoard`
+
+Updates an existing board column.
+
+```graphql
+mutation UpdateBoard($input: UpdateBoardInput!) {
+  updateBoard(updateBoardInput: $input) {
+    id
+    name
+    color
+    position
+    wipLimit
+  }
+}
+```
+
+**Input: `UpdateBoardInput!`**
+
+<ParamField body="id" type="ID" required>
+  ID of the board to update.
+</ParamField>
+<ParamField body="name" type="string">
+  New column name.
+</ParamField>
+<ParamField body="color" type="string">
+  New hex color.
+</ParamField>
+<ParamField body="position" type="number">
+  New sort position.
+</ParamField>
+<ParamField body="wipLimit" type="number">
+  New WIP limit.
+</ParamField>
+
+**Returns:** `Board!`
+
+---
+
+### `removeBoard`
+
+Permanently deletes a board column by ID.
+
+```graphql
+mutation RemoveBoard($id: String!) {
+  removeBoard(id: $id) {
+    id
+    name
+  }
+}
+```
+
+<ParamField body="id" type="string" required>
+  ID of the board column to delete.
+</ParamField>
+
+**Returns:** `Board!`
+
+---
+
+## Members
+
+### `addProjectMember`
+
+Invites a user to a project by email address. The invitation is sent with a specified role and starts in `PENDING` status until the user responds.
+
+```graphql
+mutation AddProjectMember($input: AddProjectMemberInput!) {
+  addProjectMember(input: $input) {
+    id
+    role
+    status
+    joinedAt
+    user {
+      id
+      name
+      avatarUrl
+    }
+  }
+}
+```
+
+**Input: `AddProjectMemberInput!`**
+
+<ParamField body="email" type="string" required>
+  Email address of the user to invite.
+</ParamField>
+<ParamField body="projectId" type="ID" required>
+  ID of the project to invite the user to.
+</ParamField>
+<ParamField body="role" type="ProjectRole" required>
+  Role to assign: `LEADER`, `STUDENT`, `SUPERVISOR`, or `EXTERNAL`.
+</ParamField>
+
+**Returns:** `ProjectMemberEntity!`
+
+---
+
+### `removeProjectMember`
+
+Removes a member from a project by their membership record ID.
+
+```graphql
+mutation RemoveProjectMember($memberId: ID!) {
+  removeProjectMember(memberId: $memberId)
+}
+```
+
+<ParamField body="memberId" type="ID" required>
+  ID of the project membership record to remove.
+</ParamField>
+
+**Returns:** `Boolean!`
+
+---
+
+### `respondToInvitation`
+
+Allows an invited user to accept or decline a project invitation.
+
+```graphql
+mutation RespondToInvitation($accept: Boolean!, $projectId: ID!) {
+  respondToInvitation(accept: $accept, projectId: $projectId) {
+    id
+    role
+    status
+    joinedAt
+  }
+}
+```
+
+<ParamField body="accept" type="boolean" required>
+  `true` to accept the invitation, `false` to decline.
+</ParamField>
+<ParamField body="projectId" type="ID" required>
+  ID of the project the invitation belongs to.
+</ParamField>
+
+**Returns:** `ProjectMemberEntity` (nullable — returns `null` when declining)
+
+---
+
+### `updateProjectMemberRole`
+
+Updates the role of an existing project member.
+
+```graphql
+mutation UpdateProjectMemberRole($input: UpdateProjectMemberInput!) {
+  updateProjectMemberRole(input: $input) {
+    id
+    role
+    status
+    user {
+      id
+      name
+    }
+  }
+}
+```
+
+**Input: `UpdateProjectMemberInput!`**
+
+<ParamField body="memberId" type="ID" required>
+  ID of the project membership record to update.
+</ParamField>
+<ParamField body="role" type="ProjectRole" required>
+  New role: `LEADER`, `STUDENT`, `SUPERVISOR`, or `EXTERNAL`.
+</ParamField>
+
+**Returns:** `ProjectMemberEntity!`
+
+---
+
+## Expected results
+
+### `createExpectedResult`
+
+Creates a new expected result (deliverable) linked to a project.
+
+```graphql
+mutation CreateExpectedResult($input: CreateExpectedResultInput!) {
+  createExpectedResult(input: $input) {
+    id
+    title
+    description
+    status
+    progress
+    ownerId
+    projectId
+    createdAt
+  }
+}
+```
+
+**Input: `CreateExpectedResultInput!`**
+
+<ParamField body="title" type="string" required>
+  Title of the expected result.
+</ParamField>
+<ParamField body="projectId" type="ID" required>
+  ID of the project this result belongs to.
+</ParamField>
+<ParamField body="ownerId" type="ID" required>
+  ID of the user responsible for this result.
+</ParamField>
+<ParamField body="description" type="string">
+  Optional description of the expected result.
+</ParamField>
+
+**Returns:** `ExpectedResult!`
+
+---
+
+### `updateResultStatus`
+
+Updates the status of an expected result and optionally attaches evidence.
+
+```graphql
+mutation UpdateResultStatus($input: UpdateResultStatusInput!) {
+  updateResultStatus(input: $input) {
+    id
+    title
+    status
+    progress
+    updatedAt
+    evidences {
+      id
+      type
+      url
+      fileKey
+    }
+    history {
+      id
+      previousStatus
+      newStatus
+      reason
+      createdAt
+    }
+  }
+}
+```
+
+**Input: `UpdateResultStatusInput!`**
+
+<ParamField body="resultId" type="string" required>
+  ID of the expected result to update.
+</ParamField>
+<ParamField body="status" type="ResultStatus" required>
+  New status: `NOT_STARTED`, `STARTED`, `IN_REVIEW`, `COMPLETED`, or `VALIDATED`.
+</ParamField>
+<ParamField body="reason" type="string">
+  Reason for the status change, stored in the status history log.
+</ParamField>
+<ParamField body="evidenceType" type="string">
+  Type descriptor for the attached evidence. Use `"URL"`, `"IMAGE"`, or `"PDF"` for consistency with how the front-end categorises evidence items.
+</ParamField>
+<ParamField body="evidenceUrl" type="string">
+  Public URL pointing to the evidence.
+</ParamField>
+<ParamField body="evidenceFileKey" type="string">
+  S3 file key for evidence uploaded via `getUploadPresignedUrl`.
+</ParamField>
+
+**Returns:** `ExpectedResult!`
+
+---
+
+## Files
+
+### `getUploadPresignedUrl`
+
+Generates a pre-signed S3 upload URL for direct browser-to-storage uploads. Use the returned `uploadUrl` to `PUT` the file, then pass the `fileKey` to `updateResultStatus` as evidence.
+
+```graphql
+mutation GetUploadPresignedUrl($contentType: String!, $fileName: String!) {
+  getUploadPresignedUrl(contentType: $contentType, fileName: $fileName) {
+    uploadUrl
+    fileKey
+  }
+}
+```
+
+<ParamField body="contentType" type="string" required>
+  MIME type of the file (e.g. `application/pdf`, `image/png`).
+</ParamField>
+<ParamField body="fileName" type="string" required>
+  Original file name, used to derive the storage key.
+</ParamField>
+
+**Returns:** `PresignedUrlResponse!`
+
+<ResponseField name="uploadUrl" type="string" required>
+  Pre-signed S3 URL. Send a `PUT` request with the file body directly to this URL.
+</ResponseField>
+<ResponseField name="fileKey" type="string" required>
+  The S3 object key to reference the uploaded file in subsequent API calls.
+</ResponseField>
+
+---
+
+## Notifications
+
+### `markNotificationAsRead`
+
+Marks a single notification as read.
+
+```graphql
+mutation MarkNotificationAsRead($id: ID!) {
+  markNotificationAsRead(id: $id) {
+    id
+    isRead
+    title
+    type
+  }
+}
+```
+
+<ParamField body="id" type="ID" required>
+  ID of the notification to mark as read.
+</ParamField>
+
+**Returns:** `NotificationEntity!`
+
+---
+
+### `markAllNotificationsAsRead`
+
+Marks all of the authenticated user's notifications as read in a single operation.
+
+```graphql
+mutation MarkAllNotificationsAsRead {
+  markAllNotificationsAsRead
+}
+```
+
+**Returns:** `Boolean!` — `true` when the operation succeeds.
+
+---
+
+## Subjects
+
+### `createSubject`
+
+Creates a new subject and associates it with one or more professors.
+
+```graphql
+mutation CreateSubject($input: CreateSubjectInput!) {
+  createSubject(input: $input) {
+    id
+    name
+    code
+    period
+    professors {
+      id
+      name
+    }
+  }
+}
+```
+
+**Input: `CreateSubjectInput!`**
+
+<ParamField body="name" type="string" required>
+  Subject display name.
+</ParamField>
+<ParamField body="period" type="string" required>
+  Academic period (e.g. `2025-1`).
+</ParamField>
+<ParamField body="professorIds" type="string[]" required>
+  Array of user IDs for the professors to associate with this subject.
+</ParamField>
+<ParamField body="code" type="string">
+  Optional subject code.
+</ParamField>
+
+**Returns:** `SubjectEntity!`
+
+---
+
+### `updateSubject`
+
+Updates an existing subject. Only the `id` field is required.
+
+```graphql
+mutation UpdateSubject($input: UpdateSubjectInput!) {
+  updateSubject(input: $input) {
+    id
+    name
+    code
+    period
+    professors {
+      id
+      name
+    }
+  }
+}
+```
+
+**Input: `UpdateSubjectInput!`**
+
+<ParamField body="id" type="string" required>
+  ID of the subject to update.
+</ParamField>
+<ParamField body="name" type="string">
+  Updated name.
+</ParamField>
+<ParamField body="code" type="string">
+  Updated code.
+</ParamField>
+<ParamField body="period" type="string">
+  Updated academic period.
+</ParamField>
+<ParamField body="professorIds" type="string[]">
+  Updated array of professor user IDs.
+</ParamField>
+
+**Returns:** `SubjectEntity!`
+
+---
+
+### `removeSubject`
+
+Permanently deletes a subject by ID.
+
+```graphql
+mutation RemoveSubject($id: String!) {
+  removeSubject(id: $id) {
+    id
+    name
+  }
+}
+```
+
+<ParamField body="id" type="string" required>
+  ID of the subject to delete.
+</ParamField>
+
+**Returns:** `SubjectEntity!`

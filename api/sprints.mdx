@@ -1,0 +1,228 @@
+---
+title: "Sprints resource — GraphQL API reference"
+description: "GraphQL queries and mutations for creating, starting, and completing sprints in PROJEIC, with Sprint and BurndownDataPoint type references."
+---
+
+Sprints are time-boxed iterations used in `SCRUM` and `SCRUMBAN` projects. Each sprint belongs to a single project and progresses through a defined lifecycle: from `PLANNED`, to `ACTIVE`, and finally to `COMPLETED` or `CANCELLED`. Tasks can be assigned to a sprint, and the burndown chart query provides day-by-day progress data for tracking ideal versus actual completion rates throughout the sprint period.
+
+## The `Sprint` type
+
+<ResponseField name="id" type="ID!" required>
+  Unique identifier for the sprint, generated as a cuid.
+</ResponseField>
+
+<ResponseField name="name" type="String!" required>
+  Display name for the sprint (e.g. "Sprint 1", "Alpha Release").
+</ResponseField>
+
+<ResponseField name="goal" type="String">
+  Optional sprint goal — a short statement describing what the team aims to achieve.
+</ResponseField>
+
+<ResponseField name="status" type="String!" required>
+  Current status of the sprint. Corresponds to `SprintStatus` enum values: `PLANNED`, `ACTIVE`, `COMPLETED`, `CANCELLED`.
+</ResponseField>
+
+<ResponseField name="startDate" type="DateTime">
+  Planned or actual start date of the sprint.
+</ResponseField>
+
+<ResponseField name="endDate" type="DateTime">
+  Planned or actual end date of the sprint.
+</ResponseField>
+
+<ResponseField name="projectId" type="String!" required>
+  ID of the project this sprint belongs to.
+</ResponseField>
+
+---
+
+## The `BurndownDataPoint` type
+
+Each data point in the burndown chart represents a single day within the sprint.
+
+<ResponseField name="date" type="String!" required>
+  ISO date string for this data point (e.g. `"2026-04-15"`).
+</ResponseField>
+
+<ResponseField name="dayLabel" type="String!" required>
+  Human-readable day label (e.g. `"Day 1"`, `"Day 2"`).
+</ResponseField>
+
+<ResponseField name="ideal" type="Float">
+  The ideal remaining task count or story points for this day, based on a linear burndown from sprint start to end.
+</ResponseField>
+
+<ResponseField name="real" type="Float">
+  The actual remaining task count or story points recorded for this day.
+</ResponseField>
+
+---
+
+## Enums
+
+### SprintStatus
+
+<ResponseField name="PLANNED" type="enum value">
+  The sprint has been created but not yet started. Tasks can be added and removed freely. This is the default status.
+</ResponseField>
+<ResponseField name="ACTIVE" type="enum value">
+  The sprint is currently running. Only one sprint per project can be active at a time.
+</ResponseField>
+<ResponseField name="COMPLETED" type="enum value">
+  The sprint has been formally closed. Incomplete tasks should be moved to the next sprint or backlog.
+</ResponseField>
+<ResponseField name="CANCELLED" type="enum value">
+  The sprint was abandoned before it could be completed.
+</ResponseField>
+
+---
+
+## Queries
+
+### `sprintsByProject`
+
+Returns all sprints for a given project, ordered by creation date.
+
+```graphql
+query SprintsByProject($projectId: String!) {
+  sprintsByProject(projectId: $projectId) {
+    id
+    name
+    goal
+    status
+    startDate
+    endDate
+    projectId
+  }
+}
+```
+
+<ParamField path="projectId" type="String!" required>
+  ID of the project whose sprints to retrieve.
+</ParamField>
+
+### `sprintBurndown`
+
+Returns a series of `BurndownDataPoint` values covering every day from the sprint's start date to its end date. Use this data to render a burndown chart.
+
+```graphql
+query SprintBurndown($sprintId: String!) {
+  sprintBurndown(sprintId: $sprintId) {
+    date
+    dayLabel
+    ideal
+    real
+  }
+}
+```
+
+<ParamField path="sprintId" type="String!" required>
+  ID of the sprint to fetch burndown data for.
+</ParamField>
+
+<Note>
+  The `sprintBurndown` query requires the sprint to have both a `startDate` and an `endDate` set. Sprints missing these dates will return an empty array.
+</Note>
+
+---
+
+## Mutations
+
+### `createSprint`
+
+Creates a new sprint in the `PLANNED` state. The sprint is not started automatically; call `startSprint` separately when the team is ready to begin.
+
+```graphql
+mutation CreateSprint($input: CreateSprintInput!) {
+  createSprint(input: $input) {
+    id
+    name
+    goal
+    status
+    startDate
+    endDate
+    projectId
+  }
+}
+```
+
+**Variables:**
+
+```json
+{
+  "input": {
+    "name": "Sprint 1",
+    "projectId": "clx1abc2def3",
+    "goal": "Deliver the user authentication and dashboard views",
+    "startDate": "2026-04-21T00:00:00Z",
+    "endDate": "2026-05-04T00:00:00Z"
+  }
+}
+```
+
+### `startSprint`
+
+Transitions a sprint from `PLANNED` to `ACTIVE`. Only one sprint per project can be active at a time.
+
+```graphql
+mutation StartSprint($id: String!, $projectId: String!) {
+  startSprint(id: $id, projectId: $projectId) {
+    id
+    name
+    status
+    startDate
+  }
+}
+```
+
+<ParamField path="id" type="String!" required>
+  ID of the sprint to start.
+</ParamField>
+
+<ParamField path="projectId" type="String!" required>
+  ID of the project the sprint belongs to.
+</ParamField>
+
+### `completeSprint`
+
+Transitions the sprint from `ACTIVE` to `COMPLETED`. Tasks that are not in a `DONE` state remain in the project and should be moved to the backlog or the next sprint by the team.
+
+```graphql
+mutation CompleteSprint($id: String!) {
+  completeSprint(id: $id) {
+    id
+    name
+    status
+    endDate
+  }
+}
+```
+
+<ParamField path="id" type="String!" required>
+  ID of the active sprint to complete.
+</ParamField>
+
+---
+
+## `CreateSprintInput`
+
+<ParamField path="name" type="String!" required>
+  Display name for the sprint.
+</ParamField>
+
+<ParamField path="projectId" type="String!" required>
+  ID of the project this sprint belongs to.
+</ParamField>
+
+<ParamField path="goal" type="String">
+  Optional sprint goal statement.
+</ParamField>
+
+<ParamField path="startDate" type="DateTime">
+  Planned start date. Required for burndown chart calculations.
+</ParamField>
+
+<ParamField path="endDate" type="DateTime">
+  Planned end date. Required for burndown chart calculations.
+</ParamField>

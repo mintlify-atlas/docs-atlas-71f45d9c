@@ -1,0 +1,149 @@
+---
+title: "How projects work in PROJEIC"
+description: "Learn how PROJEIC models projects — including methodologies, statuses, modes, visibility, and institutional vs. internal project types."
+---
+
+A project is the top-level container in PROJEIC. Every task, board, sprint, tag, and team member belongs to a project. When you create a project, you become its `LEADER` automatically and default boards are provisioned based on the chosen methodology.
+
+## Project modes
+
+PROJEIC supports two distinct modes of project management, set at creation time via the `mode` field.
+
+<CardGroup cols={2}>
+  <Card title="CLASSIC" icon="list-check">
+    Traditional task-centric management. Tasks live on boards and optionally inside sprints. Suitable for software teams running Kanban or Scrum workflows.
+  </Card>
+  <Card title="HYBRID" icon="graduation-cap">
+    Combines tasks with **Expected Results** — academic deliverables used for institutional (university) projects. The methodology is fixed to `NONE` in this mode; progress is tracked through Expected Results instead of sprint velocity.
+  </Card>
+</CardGroup>
+
+<Info>
+  When you create a project with `mode: HYBRID`, the API automatically forces `methodology` to `NONE` regardless of what you pass.
+</Info>
+
+## Methodologies
+
+The `methodology` field controls how work is organised. It determines which default board columns are created and whether sprints are available.
+
+| Value | Description |
+|---|---|
+| `KANBAN` | Continuous flow; no sprints. Default boards are created automatically. |
+| `SCRUM` | Time-boxed sprints with a backlog. Default boards are created automatically. |
+| `SCRUMBAN` | Hybrid of Kanban and Scrum. Default boards are created automatically. |
+| `NONE` | No boards created automatically. Used for HYBRID mode projects. |
+
+## Project statuses
+
+A project moves through a lifecycle tracked by the `status` field.
+
+| Status | Meaning |
+|---|---|
+| `STARTING` | Project has been set up but work has not yet begun. |
+| `ACTIVE` | Normal working state. Default value on creation. |
+| `ON_HOLD` | Temporarily paused. |
+| `COMPLETED` | All deliverables finished. |
+| `CANCELLED` | Project abandoned. |
+
+## Institutional projects
+
+When `isInstitutional: true`, the project is linked to a university course (`Subject`) via `subjectId`. This enables the following behaviour:
+
+- Professors associated with the subject are automatically added as `SUPERVISOR` members.
+- The professor specified in `professorId` at creation time is individually invited as a supervisor.
+- Professors receive a `PROJECT_INVITATION` system notification when linked.
+
+<Note>
+  Institutional projects are intended for EIC academic courses. Set `isInstitutional: false` (the default) for internal engineering projects that are not tied to a course.
+</Note>
+
+## Visibility and archiving
+
+<CardGroup cols={2}>
+  <Card title="isPublic" icon="eye">
+    When `true`, any authenticated user can see the project in the global `findAll` query, even if they are not a member. Defaults to `false`.
+  </Card>
+  <Card title="isArchived" icon="archive">
+    Soft-delete flag. Archived projects are excluded from all listing queries by default. Data is fully preserved — pass `includeArchived: true` to retrieve them. Use `archiveProject` to set this flag; `deleteProject` performs a hard (irreversible) delete.
+  </Card>
+</CardGroup>
+
+## Key fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `ID` (cuid) | Unique identifier. |
+| `name` | `String` | Display name, 3–100 characters. |
+| `description` | `String?` | Optional long description, max 500 characters. |
+| `color` | `String` | Hex color for UI theming. Default `#3B82F6`. |
+| `status` | `ProjectStatus` | Current lifecycle status. |
+| `methodology` | `ProjectMethodology` | Development methodology. |
+| `mode` | `ProjectMode` | `CLASSIC` or `HYBRID`. |
+| `isPublic` | `Boolean` | Visibility to non-members. Default `false`. |
+| `isArchived` | `Boolean` | Soft-delete flag. Default `false`. |
+| `isInstitutional` | `Boolean` | Whether the project is tied to a university course. |
+| `subjectId` | `String?` | ID of the linked `Subject` (institutional projects only). |
+
+## Creating a project
+
+```graphql
+mutation CreateProject {
+  createProject(input: {
+    name: "PROJEIC Redesign"
+    description: "UI overhaul for the platform"
+    color: "#6366F1"
+    methodology: SCRUM
+    mode: CLASSIC
+    isPublic: false
+  }) {
+    id
+    name
+    methodology
+    mode
+    status
+  }
+}
+```
+
+## Listing and filtering projects
+
+Use `myProjects` to list only projects you are a member of, or `findAll` to list all accessible projects. Both accept a `ProjectsFilterInput`.
+
+```graphql
+query MyProjects {
+  myProjects(
+    filter: {
+      status: ACTIVE
+      methodology: SCRUM
+      includeArchived: false
+      search: "redesign"
+      skip: 0
+      take: 20
+    }
+  ) {
+    total
+    items {
+      id
+      name
+      status
+      methodology
+      myRole
+    }
+  }
+}
+```
+
+### Available filter fields
+
+| Field | Type | Description |
+|---|---|---|
+| `search` | `String` | Case-insensitive name contains search. |
+| `status` | `ProjectStatus` | Filter by lifecycle status. |
+| `methodology` | `ProjectMethodology` | Filter by methodology. |
+| `isPublic` | `Boolean` | Filter by visibility. |
+| `isInstitutional` | `Boolean` | Filter institutional vs. internal projects. |
+| `myRole` | `String` | Filter by your role within each project. |
+| `subjectId` | `String` | Filter by linked subject ID. |
+| `includeArchived` | `Boolean` | Include archived projects. Default `false`. |
+| `skip` | `Int` | Pagination offset. Default `0`. |
+| `take` | `Int` | Page size, 1–100. Default `20`. |

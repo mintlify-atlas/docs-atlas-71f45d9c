@@ -1,0 +1,148 @@
+---
+title: "Sprints and sprint planning in PROJEIC"
+description: "Learn how sprints work in PROJEIC — creating, starting, and completing sprints, assigning tasks, and tracking progress with burndown data."
+---
+
+Sprints are time-boxed iterations used in SCRUM and SCRUMBAN projects to focus work on a fixed set of tasks over a defined period. In PROJEIC, sprints are project-scoped — each sprint belongs to one project and contains the tasks assigned to it. Leaders control the full sprint lifecycle, from planning through to completion.
+
+## Sprint statuses
+
+| Status | Description |
+|---|---|
+| `PLANNED` | Sprint has been created but not yet started. Tasks can be assigned freely. |
+| `ACTIVE` | Sprint is currently running. Only one sprint can be `ACTIVE` per project at a time. |
+| `COMPLETED` | Sprint has been closed. Tasks not finished remain in the project. |
+| `CANCELLED` | Sprint was abandoned before completion. |
+
+<Warning>
+  Attempting to start a sprint when another sprint is already `ACTIVE` in the same project will throw a `400 Bad Request` error. You must complete or cancel the active sprint first.
+</Warning>
+
+## Key fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `ID` | Unique identifier. |
+| `name` | `String` | Display name for the sprint (e.g., "Sprint 1", "Beta Release"). |
+| `goal` | `String?` | Optional description of what the team aims to deliver. |
+| `status` | `String` | Current sprint status (see above). Default `PLANNED`. |
+| `startDate` | `DateTime?` | When the sprint begins. Auto-set to `now()` if not provided when calling `startSprint`. |
+| `endDate` | `DateTime?` | When the sprint ends. Auto-set to 14 days after `startDate` if not provided when calling `startSprint`. |
+| `projectId` | `String` | ID of the owning project. |
+
+## Sprint lifecycle
+
+<Steps>
+  <Step title="Create the sprint">
+    Call `createSprint` with a name, an optional goal, and optional date boundaries. The sprint is created in `PLANNED` status. Assign tasks to it by setting `sprintId` on individual tasks.
+  </Step>
+  <Step title="Assign tasks">
+    Set `sprintId` on tasks using `updateTask` (or at task creation via `createTask`). Tasks remain in `PLANNED` sprints until the sprint is started.
+  </Step>
+  <Step title="Start the sprint">
+    Call `startSprint(id, projectId)`. This sets the sprint to `ACTIVE`. If `startDate` or `endDate` were not provided at creation, they are automatically set to today and 14 days from today respectively.
+  </Step>
+  <Step title="Work through tasks">
+    Team members progress tasks through board columns (from `TODO` to `DONE`). Use the burndown query to monitor remaining work each day.
+  </Step>
+  <Step title="Complete the sprint">
+    Call `completeSprint(id)` to mark the sprint as `COMPLETED`. Unfinished tasks remain in the project and can be moved to the next sprint.
+  </Step>
+</Steps>
+
+<Note>
+  Only project `LEADER` members can call `createSprint`, `startSprint`, and `completeSprint`. Querying sprints and burndown data is available to all project members.
+</Note>
+
+## Creating a sprint
+
+```graphql
+mutation CreateSprint {
+  createSprint(input: {
+    name: "Sprint 1"
+    goal: "Ship the authentication module and onboarding flow"
+    projectId: "cld1a2b3c4d5e6f7g8h9i0j"
+    startDate: "2026-05-05T00:00:00Z"
+    endDate: "2026-05-19T00:00:00Z"
+  }) {
+    id
+    name
+    goal
+    status
+    startDate
+    endDate
+  }
+}
+```
+
+## Starting and completing a sprint
+
+```graphql
+mutation StartSprint {
+  startSprint(
+    id: "cls1a2b3c4d5e6f7g8h9i0j"
+    projectId: "cld1a2b3c4d5e6f7g8h9i0j"
+  ) {
+    id
+    name
+    status
+    startDate
+    endDate
+  }
+}
+
+mutation CompleteSprint {
+  completeSprint(id: "cls1a2b3c4d5e6f7g8h9i0j") {
+    id
+    name
+    status
+  }
+}
+```
+
+## Burndown chart
+
+Use the `sprintBurndown` query to retrieve daily data points for a sprint. Each point contains the ideal remaining work (a straight-line projection) and the real remaining work based on task completion timestamps.
+
+```graphql
+query SprintBurndown {
+  sprintBurndown(sprintId: "cls1a2b3c4d5e6f7g8h9i0j") {
+    date
+    dayLabel
+    ideal
+    real
+  }
+}
+```
+
+### BurndownDataPoint fields
+
+| Field | Type | Description |
+|---|---|---|
+| `date` | `String` | ISO date string for this day (`YYYY-MM-DD`). |
+| `dayLabel` | `String` | Human-readable label (e.g., `"Día 1"`, `"Día 2"`). |
+| `ideal` | `Float?` | Projected remaining tasks assuming linear burn rate. |
+| `real` | `Float?` | Actual remaining tasks as of this day. `null` for future days. |
+
+<Tip>
+  Plot `ideal` as a straight diagonal line from total tasks to zero, and `real` as an actual progress line. When the real line is above the ideal line, the team is behind schedule.
+</Tip>
+
+<Info>
+  The burndown query requires the sprint to have both `startDate` and `endDate` set. Sprints that were started without explicit dates will have these fields auto-populated by `startSprint`.
+</Info>
+
+## Listing sprints by project
+
+```graphql
+query SprintsByProject {
+  sprintsByProject(projectId: "cld1a2b3c4d5e6f7g8h9i0j") {
+    id
+    name
+    goal
+    status
+    startDate
+    endDate
+  }
+}
+```

@@ -1,80 +1,110 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Get started with PROJEIC Backend"
+description: "Learn how to authenticate with Google OAuth, obtain a JWT token, and make your first GraphQL query to the PROJEIC API in four steps."
 ---
 
-## Get started in three steps
+PROJEIC Backend uses Google OAuth 2.0 for authentication. Every request to the GraphQL API must include a JWT bearer token obtained after completing the OAuth flow. This guide walks you through authentication and your first queries.
 
-Get your documentation site running locally and make your first customization.
+<Note>
+  You need a running PROJEIC Backend instance before following this guide. See [Deploy PROJEIC Backend with Docker](/deployment) to get one running locally or in your environment.
+</Note>
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Authenticate with Google OAuth">
+    Redirect the user's browser to the Google OAuth endpoint. PROJEIC will handle the OAuth handshake with Google and redirect back to your frontend with a JWT token.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    GET http://localhost:4000/projeic/api/auth/google
+    ```
 
-### Step 2: Deploy your changes
+    After a successful login, the server redirects to your configured `FRONTEND_URL` with the JWT token. Store this token — you will include it in every subsequent API request as an `Authorization: Bearer` header.
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Step title="Make a GraphQL request">
+    All API operations go through a single GraphQL endpoint. Send a `POST` request with your query or mutation in the request body and include your JWT token in the `Authorization` header.
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    curl --request POST \
+      --url http://localhost:4000/projeic/api/graphql \
+      --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+      --header 'Content-Type: application/json' \
+      --data '{"query":"{ me { userId name email isAdmin } }"}'
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    <Note>
+      Replace `YOUR_JWT_TOKEN` with the token received from the OAuth redirect. Requests without a valid token will be rejected with an `Unauthorized` error.
+    </Note>
+  </Step>
 
-### Step 3: Go live
+  <Step title="Query your profile">
+    Use the `me` query to verify your authentication and retrieve your user profile.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```graphql
+    query {
+      me {
+        userId
+        name
+        email
+        isAdmin
+      }
+    }
+    ```
+
+    A successful response confirms your token is valid and returns your account details, including whether your account has admin privileges.
+  </Step>
+
+  <Step title="List your projects">
+    Use the `myProjects` query to fetch the projects you belong to. The response is paginated and includes a `total` count.
+
+    ```graphql
+    query {
+      myProjects {
+        items {
+          id
+          name
+          status
+          methodology
+        }
+        total
+      }
+    }
+    ```
+
+    Each project returns its current `status` (`STARTING`, `ACTIVE`, `ON_HOLD`, `COMPLETED`, or `CANCELLED`) and `methodology` (`KANBAN`, `SCRUM`, `SCRUMBAN`, or `NONE`).
+  </Step>
+
+  <Step title="Create a project">
+    Use the `createProject` mutation to create a new internal project. Provide at minimum a `name`; all other fields are optional.
+
+    ```graphql
+    mutation {
+      createProject(input: {
+        name: "My Engineering Project"
+        description: "A new internal project at EIC"
+        methodology: SCRUM
+        isPublic: false
+        isInstitutional: false
+      }) {
+        id
+        name
+        status
+        methodology
+        createdAt
+      }
+    }
+    ```
+
+    The mutation returns the newly created project. The `status` defaults to `ACTIVE` and the `methodology` you specified is applied immediately.
+  </Step>
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Authentication" icon="lock" href="/auth/overview">
+    Learn how JWT tokens are validated and how to handle token expiry.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Browse all available queries and mutations with parameter details.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

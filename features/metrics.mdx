@@ -1,0 +1,212 @@
+---
+title: "Project metrics, burndown, and activity feeds"
+description: "Query project health metrics including task counts by status, overdue tasks, recent activity, and sprint burndown data from PROJEIC's GraphQL API."
+---
+
+PROJEIC exposes a set of read-only analytics queries that give teams a live snapshot of project health without requiring custom aggregation on the client. The `projectMetrics` query returns counts, overdue task lists, and per-column breakdowns for a given project. The `sprintBurndown` query returns daily ideal-vs-actual data points for charting a sprint's progress. Activity feed queries surface recent actions across the project or for the authenticated user.
+
+## Project metrics
+
+`projectMetrics(projectId)` returns a `ProjectMetrics` object aggregated server-side. Call this query to populate dashboard widgets, health indicators, or project overview pages.
+
+### Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `totalTasks` | `Int!` | Total number of tasks in the project |
+| `completedTasks` | `Int!` | Tasks in the `DONE` status |
+| `inReviewTasks` | `Int!` | Tasks currently in the `IN_REVIEW` status |
+| `overdueTasksCount` | `Int!` | Number of tasks past their due date and not completed |
+| `overdueTasksList` | `[Task!]!` | Full task records for all overdue tasks |
+| `tasksByColumn` | `[ColumnMetric!]!` | Per-board-column task counts |
+| `activityLast7Days` | `Int!` | Number of activity log entries in the last 7 days |
+
+Each `ColumnMetric` entry contains:
+
+| Field | Type | Description |
+|---|---|---|
+| `boardId` | `String!` | ID of the board column |
+| `name` | `String!` | Display name of the column |
+| `color` | `String` | Column color (hex) |
+| `count` | `Int!` | Number of tasks currently in this column |
+
+### Query example
+
+```graphql
+query GetProjectMetrics($projectId: String!) {
+  projectMetrics(projectId: $projectId) {
+    totalTasks
+    completedTasks
+    inReviewTasks
+    overdueTasksCount
+    activityLast7Days
+    overdueTasksList {
+      id
+      title
+      dueDate
+      assigneeId
+      priority
+    }
+    tasksByColumn {
+      boardId
+      name
+      color
+      count
+    }
+  }
+}
+```
+
+<Tip>
+Use `overdueTasksCount` to render a warning badge in the project header, and `overdueTasksList` to show a targeted list in a dedicated "Overdue" view — both are returned in the same round trip.
+</Tip>
+
+## Sprint burndown
+
+`sprintBurndown(sprintId)` returns an array of `BurndownDataPoint` values, one per day from the sprint start to its end date. Plot `ideal` against `real` to visualise how closely the team is tracking the ideal burn rate.
+
+### Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `date` | `String!` | ISO date string for the data point (e.g. `"2026-04-15"`) |
+| `dayLabel` | `String!` | Short human-readable label (e.g. `"Day 3"`) |
+| `ideal` | `Float` | Ideal remaining work at this point in the sprint |
+| `real` | `Float` | Actual remaining work as recorded at this point |
+
+### Query example
+
+```graphql
+query GetSprintBurndown($sprintId: String!) {
+  sprintBurndown(sprintId: $sprintId) {
+    date
+    dayLabel
+    ideal
+    real
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "data": {
+    "sprintBurndown": [
+      { "date": "2026-04-07", "dayLabel": "Day 1", "ideal": 20.0, "real": 20.0 },
+      { "date": "2026-04-08", "dayLabel": "Day 2", "ideal": 17.5, "real": 18.0 },
+      { "date": "2026-04-09", "dayLabel": "Day 3", "ideal": 15.0, "real": 16.5 },
+      { "date": "2026-04-10", "dayLabel": "Day 4", "ideal": 12.5, "real": 14.0 },
+      { "date": "2026-04-11", "dayLabel": "Day 5", "ideal": 10.0, "real": 10.0 }
+    ]
+  }
+}
+```
+
+<Note>
+When `real` is consistently higher than `ideal`, the team is falling behind the sprint goal. Surface this in the UI as a warning when the gap exceeds a configurable threshold.
+</Note>
+
+## Activity feeds
+
+Three queries expose activity log data at different scopes:
+
+### Recent feed for the authenticated user
+
+`myRecentFeed` returns the most recent `ActivityLog` entries related to projects the current user belongs to. Use this to populate a personal activity stream or home-screen feed.
+
+```graphql
+query GetMyFeed {
+  myRecentFeed {
+    id
+    action
+    entity
+    entityId
+    meta
+    createdAt
+    project {
+      id
+      name
+    }
+    user {
+      userId
+      name
+      avatarUrl
+    }
+  }
+}
+```
+
+### Weekly activity points
+
+`myWeeklyActivityPoints` returns a single integer representing the number of activity log entries attributed to the current user in the last 7 days. Use it for gamification indicators or personal productivity summaries.
+
+```graphql
+query GetWeeklyPoints {
+  myWeeklyActivityPoints
+}
+```
+
+### Full project activity log
+
+`activityLogsByProject(projectId)` returns all activity log entries for a given project, ordered by recency. This is the canonical source for a project-level audit trail or timeline view.
+
+```graphql
+query GetProjectActivity($projectId: String!) {
+  activityLogsByProject(projectId: $projectId) {
+    id
+    action
+    entity
+    entityId
+    meta
+    createdAt
+    user {
+      userId
+      name
+      avatarUrl
+    }
+  }
+}
+```
+
+<Info>
+The `meta` field on `ActivityLog` is a JSON string containing additional context about the action — for example, the previous and new board column when a task is moved. Parse it on the client before displaying.
+</Info>
+
+## Building a metrics dashboard
+
+A typical dashboard page combines several of the queries above in a single render cycle. Use your GraphQL client's batching or parallel query support to fetch them concurrently:
+
+```javascript
+async function loadProjectDashboard(projectId, activeSprintId) {
+  const [metricsResult, burndownResult, activityResult] = await Promise.all([
+    graphqlClient.query({
+      query: GET_PROJECT_METRICS,
+      variables: { projectId },
+    }),
+    graphqlClient.query({
+      query: GET_SPRINT_BURNDOWN,
+      variables: { sprintId: activeSprintId },
+    }),
+    graphqlClient.query({
+      query: GET_PROJECT_ACTIVITY,
+      variables: { projectId },
+    }),
+  ]);
+
+  return {
+    metrics: metricsResult.data.projectMetrics,
+    burndown: burndownResult.data.sprintBurndown,
+    activity: activityResult.data.activityLogsByProject,
+  };
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Expected results" icon="clipboard-check" href="/features/expected-results">
+    Track academic deliverables with status progression and evidence in HYBRID-mode projects.
+  </Card>
+  <Card title="File uploads" icon="upload" href="/features/file-uploads">
+    Upload evidence files to S3 using presigned URLs and reference them via fileKey.
+  </Card>
+</CardGroup>

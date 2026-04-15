@@ -1,0 +1,479 @@
+---
+title: "Projects resource — GraphQL API reference"
+description: "GraphQL queries and mutations for creating, listing, updating, archiving, and deleting projects in PROJEIC, with all input fields documented."
+---
+
+Projects are the central resource in PROJEIC. Each project has a lifecycle status, a development methodology, an optional visibility setting, and a set of members with assigned roles. Projects can be linked to a university subject when `isInstitutional` is true, and they support both classic board-based and hybrid sprint-based workflows depending on the `mode` field.
+
+## The `ProjectEntity` type
+
+<ResponseField name="id" type="ID!" required>
+  Unique identifier for the project, generated as a cuid.
+</ResponseField>
+
+<ResponseField name="name" type="String!" required>
+  Display name of the project. Must be between 3 and 100 characters.
+</ResponseField>
+
+<ResponseField name="description" type="String">
+  Optional long description of the project. Maximum 500 characters.
+</ResponseField>
+
+<ResponseField name="color" type="String!" required>
+  Hex color string used for UI theming (e.g. `#3B82F6`). Defaults to `#3B82F6`.
+</ResponseField>
+
+<ResponseField name="status" type="ProjectStatus!" required>
+  Current lifecycle status of the project. See [ProjectStatus](#projectstatus).
+</ResponseField>
+
+<ResponseField name="methodology" type="ProjectMethodology!" required>
+  Development methodology in use. See [ProjectMethodology](#projectmethodology).
+</ResponseField>
+
+<ResponseField name="mode" type="ProjectMode">
+  Management mode: `CLASSIC` (board-only) or `HYBRID` (boards + sprints). See [ProjectMode](#projectmode).
+</ResponseField>
+
+<ResponseField name="isPublic" type="Boolean!" required>
+  Whether the project is visible to all authenticated users. Defaults to `false`.
+</ResponseField>
+
+<ResponseField name="isArchived" type="Boolean!" required>
+  Soft-delete flag. Archived projects are hidden from listings by default.
+</ResponseField>
+
+<ResponseField name="isInstitutional" type="Boolean">
+  Marks the project as tied to an academic institution. Usually paired with `subjectId`.
+</ResponseField>
+
+<ResponseField name="subjectId" type="String">
+  ID of the university subject this project belongs to.
+</ResponseField>
+
+<ResponseField name="createdAt" type="DateTime!" required>
+  ISO 8601 timestamp of when the project was created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="DateTime!" required>
+  ISO 8601 timestamp of the last update.
+</ResponseField>
+
+<ResponseField name="members" type="[ProjectMemberEntity!]">
+  List of project members. Only populated when explicitly requested by passing `includeMembers: true`.
+</ResponseField>
+
+<ResponseField name="myRole" type="ProjectRole">
+  The authenticated user's role within this project. `null` if the user is not a member.
+</ResponseField>
+
+<ResponseField name="subject" type="SubjectEntity">
+  The linked subject entity, resolved when `subjectId` is set.
+</ResponseField>
+
+---
+
+## The `PaginatedProjects` type
+
+<ResponseField name="items" type="[ProjectEntity!]!" required>
+  The list of projects for the current page.
+</ResponseField>
+
+<ResponseField name="total" type="Int!" required>
+  Total number of projects matching the filter, ignoring pagination.
+</ResponseField>
+
+<ResponseField name="skip" type="Int!" required>
+  The offset applied to this page.
+</ResponseField>
+
+<ResponseField name="take" type="Int!" required>
+  The page size applied to this page.
+</ResponseField>
+
+---
+
+## Enums
+
+### ProjectStatus
+
+<ResponseField name="STARTING" type="enum value">
+  The project has been created but work has not yet formally begun.
+</ResponseField>
+<ResponseField name="ACTIVE" type="enum value">
+  The project is currently in progress. This is the default.
+</ResponseField>
+<ResponseField name="ON_HOLD" type="enum value">
+  Work is temporarily paused.
+</ResponseField>
+<ResponseField name="COMPLETED" type="enum value">
+  The project has been finished successfully.
+</ResponseField>
+<ResponseField name="CANCELLED" type="enum value">
+  The project was discontinued before completion.
+</ResponseField>
+
+### ProjectMethodology
+
+<ResponseField name="KANBAN" type="enum value">
+  Continuous flow board. Tasks move between columns with no fixed iterations. This is the default.
+</ResponseField>
+<ResponseField name="SCRUM" type="enum value">
+  Time-boxed sprints with a backlog and sprint planning.
+</ResponseField>
+<ResponseField name="SCRUMBAN" type="enum value">
+  A hybrid of Scrum cadences and Kanban flow.
+</ResponseField>
+<ResponseField name="NONE" type="enum value">
+  No specific methodology is enforced.
+</ResponseField>
+
+### ProjectMode
+
+<ResponseField name="CLASSIC" type="enum value">
+  Board-only project management. No sprint functionality.
+</ResponseField>
+<ResponseField name="HYBRID" type="enum value">
+  Combines board columns with sprint cycles.
+</ResponseField>
+
+### ProjectRole
+
+<ResponseField name="LEADER" type="enum value">
+  Full administrative control over the project.
+</ResponseField>
+<ResponseField name="SUPERVISOR" type="enum value">
+  Read and review access, typically assigned to faculty or managers.
+</ResponseField>
+<ResponseField name="STUDENT" type="enum value">
+  Standard team member with task management permissions.
+</ResponseField>
+<ResponseField name="EXTERNAL" type="enum value">
+  Limited-access collaborator from outside the organization.
+</ResponseField>
+
+---
+
+## Queries
+
+### `findAll`
+
+Returns a paginated list of all projects visible to the authenticated user. Supports filtering and pagination via `ProjectsFilterInput`.
+
+```graphql
+query FindAll($filter: ProjectsFilterInput, $includeMembers: Boolean) {
+  findAll(filter: $filter, includeMembers: $includeMembers) {
+    items {
+      id
+      name
+      status
+      methodology
+      isPublic
+      isArchived
+      createdAt
+    }
+    total
+    skip
+    take
+  }
+}
+```
+
+<ParamField path="filter" type="ProjectsFilterInput">
+  Optional filters and pagination parameters. See [ProjectsFilterInput](#projectsfilterinput).
+</ParamField>
+
+<ParamField path="includeMembers" type="Boolean">
+  When `true`, the `members` field is populated on each returned project. Defaults to `false`.
+</ParamField>
+
+### `myProjects`
+
+Returns a paginated list of projects where the authenticated user is a member.
+
+```graphql
+query MyProjects($filter: ProjectsFilterInput) {
+  myProjects(filter: $filter) {
+    items {
+      id
+      name
+      myRole
+      status
+    }
+    total
+    skip
+    take
+  }
+}
+```
+
+<ParamField path="filter" type="ProjectsFilterInput">
+  Optional filters and pagination parameters.
+</ParamField>
+
+<ParamField path="includeMembers" type="Boolean">
+  When `true`, the `members` field is populated on each returned project.
+</ParamField>
+
+### `findOne`
+
+Fetches a single project by its ID.
+
+```graphql
+query FindOne($id: String!) {
+  findOne(id: $id) {
+    id
+    name
+    description
+    color
+    status
+    methodology
+    mode
+    isPublic
+    isArchived
+    isInstitutional
+    subjectId
+    createdAt
+    updatedAt
+    myRole
+    subject {
+      id
+      name
+      period
+    }
+  }
+}
+```
+
+<ParamField path="id" type="String!" required>
+  The ID of the project to retrieve.
+</ParamField>
+
+---
+
+## Mutations
+
+### `createProject`
+
+Creates a new project. The authenticated user is automatically added as a member with the `LEADER` role.
+
+```graphql
+mutation CreateProject($input: CreateProjectInput!) {
+  createProject(input: $input) {
+    id
+    name
+    status
+    methodology
+    color
+    createdAt
+  }
+}
+```
+
+**Variables:**
+
+```graphql
+{
+  "input": {
+    "name": "PROJEIC Frontend",
+    "description": "Main web interface for the PROJEIC platform",
+    "color": "#6366F1",
+    "methodology": "SCRUM",
+    "mode": "HYBRID",
+    "isPublic": false,
+    "status": "STARTING"
+  }
+}
+```
+
+### `updateProject`
+
+Updates an existing project. All fields except `id` are optional.
+
+```graphql
+mutation UpdateProject($input: UpdateProjectInput!) {
+  updateProject(input: $input) {
+    id
+    name
+    status
+    updatedAt
+  }
+}
+```
+
+### `archiveProject`
+
+Soft-deletes a project by setting `isArchived` to `true`. The project data is preserved and can be restored.
+
+```graphql
+mutation ArchiveProject($id: ID!) {
+  archiveProject(id: $id) {
+    id
+    isArchived
+    updatedAt
+  }
+}
+```
+
+<Note>
+  Archived projects are excluded from `findAll` and `myProjects` results by default. Pass `includeArchived: true` in the filter to include them.
+</Note>
+
+### `deleteProject`
+
+Permanently deletes a project and all associated data, including tasks, boards, sprints, and members. This operation cannot be undone.
+
+```graphql
+mutation DeleteProject($id: ID!) {
+  deleteProject(id: $id) {
+    id
+    name
+  }
+}
+```
+
+<Warning>
+  `deleteProject` cascades to all related data. Use `archiveProject` instead if you want a recoverable soft-delete.
+</Warning>
+
+---
+
+## `ProjectsFilterInput`
+
+Used with both `findAll` and `myProjects` to filter and paginate results.
+
+<ParamField path="search" type="String">
+  Case-insensitive search against the project name.
+</ParamField>
+
+<ParamField path="status" type="ProjectStatus">
+  Filter by lifecycle status.
+</ParamField>
+
+<ParamField path="methodology" type="ProjectMethodology">
+  Filter by development methodology.
+</ParamField>
+
+<ParamField path="isPublic" type="Boolean">
+  Filter by public visibility.
+</ParamField>
+
+<ParamField path="isInstitutional" type="Boolean">
+  Filter to only institutional or non-institutional projects.
+</ParamField>
+
+<ParamField path="myRole" type="String">
+  Filter by the authenticated user's role in each project.
+</ParamField>
+
+<ParamField path="subjectId" type="String">
+  Filter projects linked to a specific subject.
+</ParamField>
+
+<ParamField path="includeArchived" type="Boolean" default="false">
+  When `true`, archived projects are included in results.
+</ParamField>
+
+<ParamField path="skip" type="Int" default="0">
+  Number of records to skip for pagination.
+</ParamField>
+
+<ParamField path="take" type="Int" default="20">
+  Maximum number of records to return. Must be between 1 and 100.
+</ParamField>
+
+---
+
+## `CreateProjectInput`
+
+<ParamField path="name" type="String!" required>
+  Display name for the project. Must be 3–100 characters.
+</ParamField>
+
+<ParamField path="description" type="String">
+  Optional description. Maximum 500 characters.
+</ParamField>
+
+<ParamField path="color" type="String" default="#3B82F6">
+  Hex color for UI theming.
+</ParamField>
+
+<ParamField path="status" type="ProjectStatus" default="ACTIVE">
+  Initial lifecycle status.
+</ParamField>
+
+<ParamField path="methodology" type="ProjectMethodology" default="KANBAN">
+  Development methodology to use.
+</ParamField>
+
+<ParamField path="mode" type="ProjectMode">
+  Management mode (`CLASSIC` or `HYBRID`).
+</ParamField>
+
+<ParamField path="isPublic" type="Boolean" default="false">
+  Whether the project is publicly visible.
+</ParamField>
+
+<ParamField path="isInstitutional" type="Boolean">
+  Marks the project as institutional.
+</ParamField>
+
+<ParamField path="subjectId" type="String">
+  Links the project to a university subject.
+</ParamField>
+
+<ParamField path="professorId" type="String">
+  ID of a professor to assign as supervisor on creation.
+</ParamField>
+
+---
+
+## `UpdateProjectInput`
+
+<ParamField path="id" type="ID!" required>
+  ID of the project to update.
+</ParamField>
+
+<ParamField path="name" type="String">
+  New display name.
+</ParamField>
+
+<ParamField path="description" type="String">
+  Updated description.
+</ParamField>
+
+<ParamField path="color" type="String">
+  Updated hex color.
+</ParamField>
+
+<ParamField path="status" type="ProjectStatus">
+  Updated lifecycle status.
+</ParamField>
+
+<ParamField path="methodology" type="ProjectMethodology">
+  Updated methodology.
+</ParamField>
+
+<ParamField path="mode" type="ProjectMode">
+  Updated management mode.
+</ParamField>
+
+<ParamField path="isPublic" type="Boolean">
+  Updated visibility setting.
+</ParamField>
+
+<ParamField path="isInstitutional" type="Boolean">
+  Updated institutional flag.
+</ParamField>
+
+<ParamField path="subjectId" type="String">
+  Updated subject link.
+</ParamField>
+
+<ParamField path="professorId" type="String">
+  Updated professor assignment.
+</ParamField>
+
+<ParamField path="assignMeAsLeader" type="Boolean">
+  When `true`, assigns the authenticated user as a `LEADER` of the project.
+</ParamField>

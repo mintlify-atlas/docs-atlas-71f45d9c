@@ -1,0 +1,132 @@
+---
+title: "Kanban boards for project task management"
+description: "Boards are column-based views in PROJEIC for organizing tasks visually. Create custom columns, set WIP limits, and reorder tasks by position."
+---
+
+Boards in PROJEIC represent individual columns in a Kanban-style view — stages like "Backlog", "To Do", "In Progress", "In Review", and "Done". Each board belongs to a project and holds tasks ordered by a `position` integer, giving you full control over the column layout and task sequence without relying on timestamps or arbitrary ordering.
+
+## Board fields
+
+A `Board` object contains the following fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `ID!` | — | Unique identifier (cuid) |
+| `name` | `String!` | Yes | Display label for the column |
+| `position` | `Int!` | — | Integer index used for ordering (ascending) |
+| `color` | `String` | No | Optional hex color (e.g., `#3B82F6`) |
+| `wipLimit` | `Int` | No | Maximum number of tasks allowed in this column |
+| `projectId` | `String!` | — | The project this board belongs to |
+
+<Info>
+  The WIP (Work In Progress) limit is enforced server-side. If you attempt to move a task into a column that has already reached its `wipLimit`, the `updateTask` mutation will throw an error. Setting `wipLimit` to `null` or omitting it means no limit is applied.
+</Info>
+
+## Default boards
+
+When you create a new project, call `createDefaultBoards` to initialize a standard Kanban column set in a single mutation. This creates five columns in order:
+
+| Position | Name | Color |
+|---|---|---|
+| 0 | Backlog | `#9CA3AF` |
+| 1 | To Do | `#3B82F6` |
+| 2 | In Progress | `#F59E0B` |
+| 3 | In Review | `#8B5CF6` |
+| 4 | Done | `#10B981` |
+
+```graphql
+mutation {
+  createDefaultBoards(projectId: "clx1abc23def") {
+    id
+    name
+    position
+    color
+  }
+}
+```
+
+## Listing boards
+
+Use `boardsByProject` to retrieve all boards for a project. Results are returned in ascending `position` order.
+
+```graphql
+query {
+  boardsByProject(projectId: "clx1abc23def") {
+    id
+    name
+    position
+    color
+    wipLimit
+  }
+}
+```
+
+## Creating a custom board
+
+Use the `createBoard` mutation with a `CreateBoardInput` to add a column beyond the defaults. Only project members with the `LEADER` role can create boards.
+
+`CreateBoardInput` fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | `String!` | Yes | Column display name |
+| `projectId` | `String!` | Yes | Target project |
+| `position` | `Int` | No | Column index; if omitted, appended after the last board |
+| `color` | `String` | No | Hex color string |
+| `wipLimit` | `Int` | No | Max tasks in this column |
+
+```graphql
+mutation {
+  createBoard(createBoardInput: {
+    name: "Blocked"
+    projectId: "clx1abc23def"
+    color: "#EF4444"
+    wipLimit: 5
+  }) {
+    id
+    name
+    position
+    color
+    wipLimit
+  }
+}
+```
+
+## Updating a board
+
+Use `updateBoard` to change a board's name, position, color, or WIP limit. Supply only the fields you want to change alongside the required `id`. Requires `LEADER` role.
+
+```graphql
+mutation {
+  updateBoard(updateBoardInput: {
+    id: "clxboard456"
+    name: "QA Review"
+    wipLimit: 3
+  }) {
+    id
+    name
+    wipLimit
+  }
+}
+```
+
+## Deleting a board
+
+Use `removeBoard` to permanently delete a column. Tasks assigned to the deleted board have their `boardId` set to `null` (unassigned) due to cascade rules. Requires `LEADER` role.
+
+```graphql
+mutation {
+  removeBoard(id: "clxboard456") {
+    id
+    name
+  }
+}
+```
+
+## Task assignment and position
+
+Tasks are linked to a board via the `boardId` field. Tasks where `boardId` is `null` are considered unassigned and will not appear in any column. The `position` field on a task is an integer used for drag-and-drop ordering within a board — update it with `updateTask` to reorder tasks.
+
+<Tip>
+  When reordering boards or tasks, update `position` values in a single batch to avoid momentary ordering conflicts if your client sends multiple mutations in quick succession.
+</Tip>

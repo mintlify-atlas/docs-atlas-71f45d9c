@@ -1,0 +1,139 @@
+---
+title: "Tasks: tracking work in PROJEIC"
+description: "Understand how tasks are structured in PROJEIC — statuses, priorities, subtasks, assignments, boards, sprints, tags, and comments."
+---
+
+Tasks are the primary unit of work in PROJEIC. Every piece of work — whether a bug fix, a feature, or an academic deliverable step — is represented as a task that belongs to a project. Tasks can be organised onto board columns, grouped into sprints, assigned to team members, labelled with tags, broken into subtasks, and linked to Expected Results in HYBRID-mode projects.
+
+## Task statuses
+
+A task moves through the following statuses over its lifetime:
+
+| Status | Description |
+|---|---|
+| `BACKLOG` | Default status for new tasks not linked to an Expected Result. Not yet scheduled. |
+| `TODO` | Scheduled and ready to work on. Default for tasks created with an `expectedResultId`. |
+| `IN_PROGRESS` | Actively being worked on. |
+| `IN_REVIEW` | Submitted for review by the assignee. |
+| `DONE` | Completed and approved. Only `LEADER` or `SUPERVISOR` roles can set this status. |
+| `CANCELLED` | Abandoned. Only `LEADER` or `SUPERVISOR` roles can set this status. |
+
+<Warning>
+  Students (`STUDENT` role) cannot set a task to `DONE`, `BACKLOG`, or `CANCELLED` — these transitions are restricted to project leaders and supervisors. External collaborators (`EXTERNAL` role) cannot edit or move any tasks at all.
+</Warning>
+
+## Task priorities
+
+| Priority | Description |
+|---|---|
+| `LOW` | Nice to have. |
+| `MEDIUM` | Default priority for new tasks. |
+| `HIGH` | Important and time-sensitive. |
+| `URGENT` | Blocking or critical path. |
+
+## Key fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `ID` (cuid) | Unique identifier. |
+| `title` | `String` | Short summary of the work item. |
+| `description` | `String?` | Optional detailed description. |
+| `status` | `String` | Current task status (see above). |
+| `priority` | `String` | Task priority level. Default `MEDIUM`. |
+| `position` | `Int` | Ordering index within the board column or sprint. Default `0`. |
+| `startDate` | `DateTime?` | When work is scheduled to begin. |
+| `dueDate` | `DateTime?` | Deadline for completion. |
+| `creatorId` | `String` | ID of the user who created the task. |
+| `assigneeId` | `String?` | ID of the single user the task is assigned to. |
+| `boardId` | `String?` | ID of the board column the task is placed in. |
+| `sprintId` | `String?` | ID of the sprint the task belongs to (optional). |
+| `parentId` | `String?` | ID of the parent task; set to create a subtask. |
+| `expectedResultId` | `String?` | ID of the Expected Result this task contributes to (HYBRID mode). |
+
+## Board assignment
+
+Every task can be placed on a board column via `boardId`. Board columns represent workflow stages (e.g., "To Do", "In Progress", "Review"). Moving a task between columns updates `boardId` and is validated against each column's WIP limit — if the destination column is full, the move is rejected.
+
+## Sprint assignment
+
+Tasks can optionally belong to a sprint via `sprintId`. Passing `sprintId: "backlog"` when querying `tasksByProject` returns only tasks with no sprint assignment.
+
+## Subtasks
+
+Set `parentId` to the ID of another task to nest it as a subtask. There is no depth limit enforced at the schema level, but a single level of nesting is the recommended pattern.
+
+## Tags
+
+Tags are project-scoped labels with a `name` and `color`. Pass an array of tag IDs in the `tags` field of `CreateTaskInput` to attach them at creation time.
+
+<Tip>
+  Tags are defined per project. Use the `tags` query scoped to a project to list available tag IDs before creating tasks.
+</Tip>
+
+## Comments and attachments
+
+- **Comments**: Inline threaded discussions attached to a task. Use the comments API to create, update, and delete them.
+- **Attachments**: Files associated with a task. Use `getUploadPresignedUrl` to obtain an S3 pre-signed URL, then reference the resulting `fileKey` when creating the attachment record.
+
+## Expected Result linking (HYBRID mode)
+
+In HYBRID-mode projects, tasks can be linked to an `ExpectedResult` via `expectedResultId`. This associates the task's completion with the progress of the academic deliverable. Tasks created with an `expectedResultId` start in `TODO` status rather than `BACKLOG`.
+
+<Info>
+  The `position` field controls the display order of tasks within a column or sprint list. When implementing drag-and-drop reordering, update `position` on each affected task using `updateTask`. Lower values appear first.
+</Info>
+
+## Creating a task
+
+```graphql
+mutation CreateTask {
+  createTask(createTaskInput: {
+    title: "Implement authentication flow"
+    description: "Add Google OAuth login using Passport.js"
+    projectId: "cld1a2b3c4d5e6f7g8h9i0j"
+    creatorId: "cld9z8y7x6w5v4u3t2s1r0q"
+    boardId: "clb1a2b3c4d5e6f7g8h9i0j"
+    sprintId: "cls1a2b3c4d5e6f7g8h9i0j"
+    assigneeId: "cld9z8y7x6w5v4u3t2s1r0q"
+    priority: "HIGH"
+    dueDate: "2026-05-01T00:00:00Z"
+  }) {
+    id
+    title
+    status
+    priority
+    position
+  }
+}
+```
+
+## Updating a task
+
+Use `updateTask` to change any mutable field. Only the fields you provide are updated — all others remain unchanged.
+
+```graphql
+mutation MoveTask {
+  updateTask(updateTaskInput: {
+    id: "clt1a2b3c4d5e6f7g8h9i0j"
+    status: "IN_REVIEW"
+    boardId: "clb9z8y7x6w5v4u3t2s1r0q"
+    position: 2
+  }) {
+    id
+    status
+    boardId
+    position
+  }
+}
+```
+
+## Role-based editing restrictions
+
+The `updateTask` mutation enforces role-based rules:
+
+| Role | What they can do |
+|---|---|
+| `EXTERNAL` | Read-only. Cannot edit or move any task. |
+| `SUPERVISOR` | Can change `status` (including setting `DONE`). Cannot edit `title`, `description`, `priority`, or dates. |
+| `STUDENT` | Can update only tasks assigned to them. Cannot set status to `DONE`, `BACKLOG`, or `CANCELLED`. |
+| `LEADER` | Full edit access on all tasks in the project. |

@@ -1,0 +1,128 @@
+---
+title: "Deploy PROJEIC Backend with Docker"
+description: "Step-by-step guide to deploying PROJEIC Backend using Docker, configuring PostgreSQL with Prisma, and setting required environment variables."
+---
+
+PROJEIC Backend ships with a multi-stage Dockerfile that produces a lean production image. The container runs Prisma migrations automatically on startup and then starts the Node.js server. You need a PostgreSQL database and a set of environment variables before running the container.
+
+<Steps>
+  <Step title="Build the Docker image">
+    Clone the repository and build the image from the project root. The build uses two stages: a `builder` stage that compiles TypeScript and generates the Prisma client, and a `runner` stage that copies only the compiled output and production dependencies into the final image.
+
+    ```bash
+    docker build -t projeic-backend .
+    ```
+
+    The `builder` stage runs `npm ci`, generates the Prisma client with `npx prisma generate`, and compiles the application with `npm run build`. The `runner` stage installs only production dependencies (`npm ci --omit=dev`) and copies the built `dist/` folder and `prisma/` directory from the builder.
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file or pass environment variables directly to `docker run`. The following variables are required:
+
+    | Variable | Description |
+    |---|---|
+    | `DATABASE_URL` | PostgreSQL connection string used by Prisma at runtime (supports connection pooling). |
+    | `DIRECT_URL` | Direct PostgreSQL connection string used by Prisma for migrations. |
+    | `FRONTEND_URL` | URL of the frontend app — used for CORS and the Google OAuth redirect. |
+    | `PORT` | Port the server listens on. Defaults to `4000` if not set. |
+    | `JWT_SECRET` | Secret key used to sign and verify JWT tokens. |
+    | `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID from Google Cloud Console. |
+    | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret from Google Cloud Console. |
+
+    Example `.env` file:
+
+    ```bash
+    DATABASE_URL="postgresql://user:password@db-pooler:5432/projeic?schema=public"
+    DIRECT_URL="postgresql://user:password@db:5432/projeic?schema=public"
+    FRONTEND_URL="http://localhost:3000"
+    PORT=4000
+    JWT_SECRET="your-secret-key"
+    GOOGLE_CLIENT_ID="your-google-client-id.apps.googleusercontent.com"
+    GOOGLE_CLIENT_SECRET="your-google-client-secret"
+    ```
+
+    <Note>
+      `DATABASE_URL` and `DIRECT_URL` are both required by Prisma when using a connection pooler (such as PgBouncer or Supabase's pooler). `DATABASE_URL` points to the pooled connection and `DIRECT_URL` points directly to the database. If you are not using a pooler, both variables can point to the same PostgreSQL instance.
+    </Note>
+  </Step>
+
+  <Step title="Run the container">
+    Start the container and pass your environment variables. The container exposes port `4000`.
+
+    ```bash
+    docker run -p 4000:4000 \
+      --env-file .env \
+      projeic-backend
+    ```
+
+    Or pass variables inline:
+
+    ```bash
+    docker run -p 4000:4000 \
+      -e DATABASE_URL="postgresql://user:password@host:5432/projeic" \
+      -e DIRECT_URL="postgresql://user:password@host:5432/projeic" \
+      -e FRONTEND_URL="http://localhost:3000" \
+      -e PORT=4000 \
+      -e JWT_SECRET="your-secret-key" \
+      -e GOOGLE_CLIENT_ID="your-client-id" \
+      -e GOOGLE_CLIENT_SECRET="your-client-secret" \
+      projeic-backend
+    ```
+
+    <Warning>
+      The container runs `npx prisma migrate deploy` before starting the server. This applies all pending database migrations. Ensure your `DIRECT_URL` points to a reachable PostgreSQL instance before starting the container, or the server will fail to start.
+    </Warning>
+
+    On a successful start, you will see:
+
+    ```bash
+    🚀 API: http://localhost:4000/projeic/api
+    📊 GraphQL: http://localhost:4000/projeic/api/graphql
+    ```
+  </Step>
+
+  <Step title="Verify the deployment">
+    Check that the GraphQL endpoint is reachable. Opening the URL in a browser loads the Apollo Sandbox playground, confirming the server is running.
+
+    ```bash
+    curl http://localhost:4000/projeic/api/graphql
+    ```
+
+    The playground is enabled in all environments (`playground: true` in `app.module.ts`). You can use it to explore the schema and run queries interactively.
+  </Step>
+</Steps>
+
+## Docker Compose example
+
+For local development or simple server deployments, use Docker Compose to run the backend alongside a PostgreSQL database:
+
+```yaml
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: projeic
+      POSTGRES_PASSWORD: projeic
+      POSTGRES_DB: projeic
+    ports:
+      - "5432:5432"
+
+  backend:
+    image: projeic-backend
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: "postgresql://projeic:projeic@db:5432/projeic?schema=public"
+      DIRECT_URL: "postgresql://projeic:projeic@db:5432/projeic?schema=public"
+      FRONTEND_URL: "http://localhost:3000"
+      PORT: "4000"
+      JWT_SECRET: "change-me-in-production"
+      GOOGLE_CLIENT_ID: "your-client-id"
+      GOOGLE_CLIENT_SECRET: "your-client-secret"
+    depends_on:
+      - db
+```
+
+<Tip>
+  In production, use a managed PostgreSQL service and a connection pooler. Set `DATABASE_URL` to the pooled endpoint and `DIRECT_URL` to the direct database connection to ensure migrations run correctly.
+</Tip>

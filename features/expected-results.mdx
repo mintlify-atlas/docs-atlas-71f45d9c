@@ -1,0 +1,234 @@
+---
+title: "Expected results and evidence tracking"
+description: "Expected results let HYBRID-mode projects track academic deliverables with status progression, owners, collaborators, and evidence uploads."
+---
+
+Expected results are the primary deliverable-tracking unit in PROJEIC's HYBRID project mode. Each result represents an academic output — such as a prototype, report, or deployment — and moves through a defined status lifecycle as the team produces evidence of completion. Results are owned by a single user, may have multiple collaborators drawn from the project's membership, and accumulate evidence items (external links, images, or PDFs) at each status transition.
+
+## Data model
+
+An `ExpectedResult` record exposes the following fields through the GraphQL API:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `ID!` | Unique identifier |
+| `title` | `String!` | Short name of the deliverable |
+| `description` | `String` | Optional longer description |
+| `status` | `ResultStatus!` | Current lifecycle status |
+| `progress` | `Int!` | Completion percentage (0–100) |
+| `owner` | `User!` | User responsible for the result |
+| `ownerId` | `String!` | ID of the owner |
+| `collaborators` | `[ProjectMember]` | Additional project members contributing |
+| `tasks` | `[Task]` | Tasks linked to this result via `expectedResultId` |
+| `evidences` | `[Evidence]` | Attached evidence items |
+| `history` | `[StatusLog]` | Full audit trail of status changes |
+| `createdAt` | `DateTime!` | Creation timestamp |
+| `updatedAt` | `DateTime!` | Last update timestamp |
+
+### Evidence fields
+
+Each `Evidence` record attached to a result contains:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `ID!` | Unique identifier |
+| `type` | `String!` | One of `"URL"`, `"IMAGE"`, or `"PDF"` |
+| `url` | `String` | External link (e.g. a pull request, Figma file, or deploy URL) |
+| `fileKey` | `String` | S3 object key for uploaded files |
+| `createdAt` | `DateTime!` | Timestamp |
+
+### Status history
+
+Every status change is recorded in a `StatusLog` entry:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `ID!` | Unique identifier |
+| `previousStatus` | `String!` | Status before the transition |
+| `newStatus` | `String!` | Status after the transition |
+| `reason` | `String` | Optional explanation for the change |
+| `createdAt` | `DateTime!` | Timestamp of the transition |
+
+<Note>
+`StatusLog` records are immutable. The full history of every status change is preserved and accessible through the `history` field on `ExpectedResult`.
+</Note>
+
+## Status lifecycle
+
+Results progress through five statuses. Each transition can carry an optional reason and evidence attachment.
+
+<Steps>
+  <Step title="NOT_STARTED">
+    The result has been created but work has not yet begun. This is the default status for all new expected results.
+  </Step>
+  <Step title="STARTED">
+    Active work is underway. The team is producing the deliverable.
+  </Step>
+  <Step title="IN_REVIEW">
+    The deliverable has been submitted for review by a supervisor or project leader.
+  </Step>
+  <Step title="VALIDATED">
+    The supervisor has reviewed and approved the deliverable. Evidence of validation is typically attached at this stage.
+  </Step>
+  <Step title="COMPLETED">
+    The result is fully accepted and closed. No further transitions are expected.
+  </Step>
+</Steps>
+
+<Tip>
+Attach evidence when calling `updateResultStatus` so that every status transition is backed by a verifiable artifact. Transitions without evidence are still valid but offer less auditability.
+</Tip>
+
+## Linking tasks to a result
+
+Any task in a HYBRID-mode project can be associated with an expected result by setting `expectedResultId` on creation or update. This allows teams to trace individual work items back to the academic deliverable they contribute to.
+
+```graphql
+mutation LinkTaskToResult {
+  createTask(createTaskInput: {
+    title: "Implement authentication module"
+    projectId: "proj_abc123"
+    creatorId: "user_xyz"
+    expectedResultId: "result_def456"
+  }) {
+    id
+    title
+    expectedResultId
+  }
+}
+```
+
+## Queries
+
+### Fetch all expected results for a project
+
+```graphql
+query GetExpectedResults($projectId: String!) {
+  expectedResultsByProject(projectId: $projectId) {
+    id
+    title
+    description
+    status
+    progress
+    owner {
+      userId
+      name
+      avatarUrl
+    }
+    collaborators {
+      id
+      role
+      user {
+        id
+        name
+      }
+    }
+    tasks {
+      id
+      title
+      status
+    }
+    evidences {
+      id
+      type
+      url
+      fileKey
+      createdAt
+    }
+    history {
+      id
+      previousStatus
+      newStatus
+      reason
+      createdAt
+    }
+  }
+}
+```
+
+## Mutations
+
+### Create an expected result
+
+Use `createExpectedResult` to add a new deliverable to a HYBRID-mode project. You must supply a `title`, the `projectId`, and the `ownerId` of the responsible user.
+
+```graphql
+mutation CreateExpectedResult {
+  createExpectedResult(input: {
+    title: "Functional prototype v1"
+    description: "A working prototype demonstrating the core authentication and dashboard flows."
+    projectId: "proj_abc123"
+    ownerId: "user_xyz"
+  }) {
+    id
+    title
+    status
+    progress
+    owner {
+      name
+    }
+  }
+}
+```
+
+### Advance the status with evidence
+
+Use `updateResultStatus` to move a result to the next status. You can optionally attach a reason and a single evidence item per transition. For file-based evidence, first obtain a `fileKey` via the [presigned URL upload flow](/features/file-uploads), then pass it as `evidenceFileKey`.
+
+```graphql
+mutation AdvanceResultToReview {
+  updateResultStatus(input: {
+    resultId: "result_def456"
+    status: IN_REVIEW
+    reason: "Prototype is complete and deployed to the staging environment."
+    evidenceUrl: "https://staging.example.com"
+    evidenceType: "URL"
+  }) {
+    id
+    status
+    progress
+    evidences {
+      id
+      type
+      url
+    }
+    history {
+      newStatus
+      previousStatus
+      reason
+      createdAt
+    }
+  }
+}
+```
+
+Attaching an uploaded file as evidence:
+
+```graphql
+mutation ValidateResultWithFile {
+  updateResultStatus(input: {
+    resultId: "result_def456"
+    status: VALIDATED
+    reason: "Supervisor has reviewed and signed off the deliverable."
+    evidenceFileKey: "uploads/reports/prototype-review-2026.pdf"
+    evidenceType: "PDF"
+  }) {
+    id
+    status
+    evidences {
+      id
+      type
+      fileKey
+    }
+  }
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="File uploads" icon="upload" href="/features/file-uploads">
+    Learn how to obtain a presigned URL and upload files to S3 before referencing them as evidence.
+  </Card>
+  <Card title="Project metrics" icon="chart-bar" href="/features/metrics">
+    Track overall project health, task counts, and burndown data alongside expected results.
+  </Card>
+</CardGroup>

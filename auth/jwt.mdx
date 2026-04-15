@@ -1,0 +1,98 @@
+---
+title: "Using JWT tokens for API requests"
+description: "Learn how to attach your JWT token to GraphQL requests, understand token payload fields, and handle authentication errors in PROJEIC."
+---
+
+After completing the Google OAuth flow, you receive a signed JWT access token. Every GraphQL request to PROJEIC must include this token — requests without it are rejected immediately, before any resolver logic runs.
+
+<Warning>
+  PROJEIC does not implement refresh tokens. When a token expires after 7 days, there is no way to silently renew it. Redirect users to `/projeic/api/auth/google` to re-authenticate and obtain a new token.
+</Warning>
+
+## Attaching the token to requests
+
+Include the token in the `Authorization` header using the `Bearer` scheme on every request:
+
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+The following `curl` example shows a complete authenticated GraphQL request:
+
+```bash
+curl -X POST http://localhost:4000/projeic/api/graphql \
+  -H "Authorization: Bearer <your-jwt-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"{ me { userId name email isAdmin avatarUrl } }"}'
+```
+
+## Verifying your token with `me`
+
+Use the `me` query to confirm your token is valid and inspect your account details:
+
+```graphql
+query {
+  me {
+    userId
+    name
+    email
+    isAdmin
+    avatarUrl
+  }
+}
+```
+
+A successful response returns your user profile. If the token is missing or invalid, you receive a GraphQL error instead (see [Authentication errors](#authentication-errors) below).
+
+## Token payload fields
+
+PROJEIC tokens are signed with **HS256** and expire after **7 days**. The payload contains the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `sub` | string | User ID (cuid) — used as the primary identifier across the API |
+| `email` | string | User email address |
+| `name` | string | Full name from the user's Google profile |
+| `avatar` | string \| null | Avatar URL from Google, or `null` if not available |
+| `isAdmin` | boolean | `true` if the user has system administrator privileges |
+
+The token is stateless — the server validates it by verifying the signature against the `JWT_SECRET` environment variable and does not make a database call on every request.
+
+## Authentication errors
+
+When a request is made without a token, or with an expired or malformed token, the GraphQL endpoint returns an error with the `UNAUTHENTICATED` code:
+
+```json
+{
+  "errors": [
+    {
+      "message": "Unauthorized",
+      "extensions": {
+        "code": "UNAUTHENTICATED"
+      }
+    }
+  ]
+}
+```
+
+The only query that does not require authentication is `health`. All other queries and mutations are protected by the JWT guard and will return this error if the token is absent or invalid.
+
+## Protected vs. unprotected operations
+
+| Operation | Auth required |
+|---|---|
+| `health` | No |
+| All other queries | Yes |
+| All mutations | Yes |
+
+## Token storage recommendations
+
+| Context | Recommendation |
+|---|---|
+| Browser SPA | `localStorage` is convenient; prefer `httpOnly` cookies for higher security |
+| Server-side | Environment variable or secrets manager; never commit tokens to source control |
+| Mobile | Use the platform's secure keychain or keystore |
+
+<Tip>
+  Remove the token from the URL immediately after extracting it on your callback page. Use `window.history.replaceState` to prevent the raw token from appearing in browser history or server access logs.
+</Tip>

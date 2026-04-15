@@ -1,0 +1,350 @@
+---
+title: "Tasks resource — GraphQL API reference"
+description: "GraphQL queries and mutations for creating, updating, and removing tasks in PROJEIC, with full field documentation for the Task type."
+---
+
+Tasks are the primary unit of work in PROJEIC. Each task belongs to a project and can optionally be placed on a board column, assigned to a sprint, and linked to a team member. Tasks support a priority level and a lifecycle status that tracks progress from backlog through to completion. Tasks can also be nested: a task with a `parentId` is treated as a subtask of the referenced task.
+
+## The `Task` type
+
+<ResponseField name="id" type="ID!" required>
+  Unique identifier for the task, generated as a cuid.
+</ResponseField>
+
+<ResponseField name="title" type="String!" required>
+  Short descriptive title of the task.
+</ResponseField>
+
+<ResponseField name="description" type="String">
+  Optional long-form description or acceptance criteria for the task.
+</ResponseField>
+
+<ResponseField name="status" type="String!" required>
+  Current workflow status of the task. Corresponds to `TaskStatus` enum values: `BACKLOG`, `TODO`, `IN_PROGRESS`, `IN_REVIEW`, `DONE`, `CANCELLED`.
+</ResponseField>
+
+<ResponseField name="priority" type="String!" required>
+  Priority level of the task. Corresponds to `TaskPriority` enum values: `LOW`, `MEDIUM`, `HIGH`, `URGENT`. Defaults to `MEDIUM`.
+</ResponseField>
+
+<ResponseField name="position" type="Int!" required>
+  Ordinal position of the task within its board column, used for drag-and-drop ordering. Defaults to `0`.
+</ResponseField>
+
+<ResponseField name="startDate" type="DateTime">
+  Optional planned start date for the task.
+</ResponseField>
+
+<ResponseField name="dueDate" type="DateTime">
+  Optional due date for the task.
+</ResponseField>
+
+<ResponseField name="projectId" type="String!" required>
+  ID of the project this task belongs to.
+</ResponseField>
+
+<ResponseField name="boardId" type="String">
+  ID of the board column this task is placed in. `null` means the task is in the backlog.
+</ResponseField>
+
+<ResponseField name="sprintId" type="String">
+  ID of the sprint this task is assigned to. Only relevant for `SCRUM` or `SCRUMBAN` projects.
+</ResponseField>
+
+<ResponseField name="assigneeId" type="String">
+  ID of the user assigned to this task. `null` means unassigned.
+</ResponseField>
+
+<ResponseField name="creatorId" type="String!" required>
+  ID of the user who created this task.
+</ResponseField>
+
+<ResponseField name="parentId" type="String">
+  ID of a parent task. When set, this task is treated as a subtask.
+</ResponseField>
+
+<ResponseField name="expectedResultId" type="String">
+  ID of an expected result this task contributes to.
+</ResponseField>
+
+<ResponseField name="createdAt" type="DateTime!" required>
+  ISO 8601 timestamp of when the task was created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="DateTime!" required>
+  ISO 8601 timestamp of the last update.
+</ResponseField>
+
+---
+
+## Enums
+
+### TaskStatus
+
+<ResponseField name="BACKLOG" type="enum value">
+  The task exists but has not been scheduled for work.
+</ResponseField>
+<ResponseField name="TODO" type="enum value">
+  The task is scheduled and ready to be picked up.
+</ResponseField>
+<ResponseField name="IN_PROGRESS" type="enum value">
+  Work on the task is actively underway.
+</ResponseField>
+<ResponseField name="IN_REVIEW" type="enum value">
+  The task is complete and awaiting review or approval.
+</ResponseField>
+<ResponseField name="DONE" type="enum value">
+  The task has been completed and accepted.
+</ResponseField>
+<ResponseField name="CANCELLED" type="enum value">
+  The task was abandoned and will not be completed.
+</ResponseField>
+
+### TaskPriority
+
+<ResponseField name="LOW" type="enum value">
+  Nice-to-have; no urgency.
+</ResponseField>
+<ResponseField name="MEDIUM" type="enum value">
+  Normal priority. This is the default.
+</ResponseField>
+<ResponseField name="HIGH" type="enum value">
+  Should be addressed soon; blocks progress.
+</ResponseField>
+<ResponseField name="URGENT" type="enum value">
+  Requires immediate attention.
+</ResponseField>
+
+---
+
+## Queries
+
+### `tasksByProject`
+
+Returns all tasks for a given project. If `sprintId` is provided, results are filtered to tasks in that sprint.
+
+```graphql
+query TasksByProject($projectId: String!, $sprintId: String) {
+  tasksByProject(projectId: $projectId, sprintId: $sprintId) {
+    id
+    title
+    status
+    priority
+    position
+    boardId
+    sprintId
+    assigneeId
+    dueDate
+  }
+}
+```
+
+<ParamField path="projectId" type="String!" required>
+  ID of the project whose tasks to retrieve.
+</ParamField>
+
+<ParamField path="sprintId" type="String">
+  When provided, only tasks assigned to this sprint are returned.
+</ParamField>
+
+### `pendingTasksByUserId`
+
+Returns all tasks assigned to the authenticated user that are not yet completed or cancelled. Useful for building personal dashboards and weekly overviews.
+
+```graphql
+query PendingTasksByUserId {
+  pendingTasksByUserId {
+    id
+    title
+    status
+    priority
+    dueDate
+    projectId
+  }
+}
+```
+
+---
+
+## Mutations
+
+### `createTask`
+
+Creates a new task within a project. The task is placed in the backlog by default unless a `boardId` is specified.
+
+```graphql
+mutation CreateTask($createTaskInput: CreateTaskInput!) {
+  createTask(createTaskInput: $createTaskInput) {
+    id
+    title
+    status
+    priority
+    boardId
+    sprintId
+    createdAt
+  }
+}
+```
+
+**Variables:**
+
+```graphql
+{
+  "createTaskInput": {
+    "title": "Design login screen",
+    "projectId": "clx1abc2def3",
+    "creatorId": "clx9usr0001",
+    "description": "Create Figma mockups for the authentication flow",
+    "priority": "HIGH",
+    "assigneeId": "clx9usr0002",
+    "boardId": "clx1brd0001",
+    "dueDate": "2026-05-01T00:00:00Z"
+  }
+}
+```
+
+### `updateTask`
+
+Updates an existing task. Use this mutation to move a task between board columns, reassign it to a different sprint, change its priority, or update its status.
+
+```graphql
+mutation UpdateTask($updateTaskInput: UpdateTaskInput!) {
+  updateTask(updateTaskInput: $updateTaskInput) {
+    id
+    title
+    status
+    boardId
+    sprintId
+    updatedAt
+  }
+}
+```
+
+**Example — moving a task to a different board column:**
+
+```graphql
+{
+  "updateTaskInput": {
+    "id": "clx1tsk0001",
+    "boardId": "clx1brd0002",
+    "status": "IN_PROGRESS"
+  }
+}
+```
+
+### `removeTask`
+
+Permanently deletes a task by ID. This also removes any subtasks, comments, and attachments associated with the task.
+
+```graphql
+mutation RemoveTask($id: String!) {
+  removeTask(id: $id) {
+    id
+    title
+  }
+}
+```
+
+---
+
+## `CreateTaskInput`
+
+<ParamField path="title" type="String!" required>
+  Short descriptive title for the task.
+</ParamField>
+
+<ParamField path="projectId" type="String!" required>
+  ID of the project this task belongs to.
+</ParamField>
+
+<ParamField path="creatorId" type="String!" required>
+  ID of the user creating the task.
+</ParamField>
+
+<ParamField path="description" type="String">
+  Optional long-form description.
+</ParamField>
+
+<ParamField path="assigneeId" type="String">
+  ID of the user to assign the task to.
+</ParamField>
+
+<ParamField path="boardId" type="String">
+  ID of the board column to place the task in. Omit to leave the task in the backlog.
+</ParamField>
+
+<ParamField path="sprintId" type="String">
+  ID of the sprint to include the task in.
+</ParamField>
+
+<ParamField path="startDate" type="DateTime">
+  Planned start date.
+</ParamField>
+
+<ParamField path="dueDate" type="DateTime">
+  Planned due date.
+</ParamField>
+
+<ParamField path="priority" type="String">
+  Priority level. Accepts `TaskPriority` enum values: `LOW`, `MEDIUM`, `HIGH`, `URGENT`.
+</ParamField>
+
+<ParamField path="tags" type="[String!]">
+  List of tag IDs to attach to the task.
+</ParamField>
+
+<ParamField path="expectedResultId" type="String">
+  ID of the expected result this task contributes to.
+</ParamField>
+
+---
+
+## `UpdateTaskInput`
+
+<ParamField path="id" type="ID!" required>
+  ID of the task to update.
+</ParamField>
+
+<ParamField path="title" type="String">
+  Updated title.
+</ParamField>
+
+<ParamField path="description" type="String">
+  Updated description.
+</ParamField>
+
+<ParamField path="status" type="String">
+  Updated workflow status. Accepts `TaskStatus` enum values.
+</ParamField>
+
+<ParamField path="priority" type="String">
+  Updated priority. Accepts `TaskPriority` enum values.
+</ParamField>
+
+<ParamField path="position" type="Int">
+  Updated ordinal position within the board column.
+</ParamField>
+
+<ParamField path="boardId" type="String">
+  Move the task to a different board column.
+</ParamField>
+
+<ParamField path="sprintId" type="String">
+  Reassign the task to a different sprint.
+</ParamField>
+
+<ParamField path="assigneeId" type="String">
+  Reassign the task to a different user.
+</ParamField>
+
+<ParamField path="startDate" type="DateTime">
+  Updated start date.
+</ParamField>
+
+<ParamField path="dueDate" type="DateTime">
+  Updated due date.
+</ParamField>
+
+<Note>
+  Subtasks are supported at the data model level via the `parentId` field on the `Task` type. The current API does not expose `parentId` as an input field on `CreateTaskInput` or `UpdateTaskInput`; subtask relationships are managed internally.
+</Note>

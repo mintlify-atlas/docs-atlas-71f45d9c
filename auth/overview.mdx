@@ -1,0 +1,52 @@
+---
+title: "Authenticate with the PROJEIC API"
+description: "PROJEIC uses Google OAuth 2.0 for authentication and issues JWT tokens for API access. Learn how to obtain and use your access token."
+---
+
+PROJEIC uses Google OAuth 2.0 exclusively — there are no username/password credentials and no API keys to manage. After a successful OAuth login, the server issues a signed JWT access token that you attach to every GraphQL request.
+
+<Note>
+  Authentication uses two REST endpoints at `/projeic/api/auth/*`. All other API operations — queries, mutations, and subscriptions — go through the GraphQL endpoint at `/projeic/api/graphql`.
+</Note>
+
+## How it works
+
+The authentication flow follows standard OAuth 2.0:
+
+1. Your frontend redirects the user to `GET /projeic/api/auth/google`.
+2. Google presents the consent screen and the user grants access to their email and profile.
+3. Google redirects back to the PROJEIC callback URL. The server exchanges the authorization code for a user profile, creates or retrieves the user account, and signs a JWT.
+4. The server redirects the user's browser to your configured frontend URL with the token in the query string: `?token=<jwt>`.
+5. Your frontend stores the token and includes it in the `Authorization: Bearer <token>` header on every GraphQL request.
+
+## Auth endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/projeic/api/auth/google` | Initiates the Google OAuth redirect flow |
+| `GET` | `/projeic/api/auth/google/callback` | OAuth callback — handled by Google, not called directly |
+
+## Token payload
+
+After login, your JWT contains the following claims:
+
+| Field | Type | Description |
+|---|---|---|
+| `sub` | string | User ID (cuid) |
+| `email` | string | User email address |
+| `name` | string | Full name from Google profile |
+| `avatar` | string \| null | Avatar URL from Google profile |
+| `isAdmin` | boolean | Whether the user has system admin privileges |
+
+Tokens are valid for **7 days**. There is no refresh mechanism — users must re-authenticate via Google when a token expires.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Google OAuth 2.0 login flow" icon="google" href="/auth/google-oauth">
+    Walk through each step of the OAuth redirect flow, from initiating login to receiving your token.
+  </Card>
+  <Card title="Using JWT tokens" icon="key" href="/auth/jwt">
+    Learn how to attach your token to GraphQL requests, understand all payload fields, and handle auth errors.
+  </Card>
+</CardGroup>

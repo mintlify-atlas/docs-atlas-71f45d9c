@@ -1,0 +1,55 @@
+---
+title: "PROJEIC Backend: GraphQL API for Engineering"
+description: "PROJEIC Backend provides a NestJS GraphQL API for managing engineering projects, tasks, sprints, and team collaboration at EIC."
+---
+
+PROJEIC Backend is the server-side API for the Project Engineering Integration Center (EIC) platform. It enables teams at EIC to create and manage engineering projects, organize work into tasks and sprints, collaborate across disciplines, and track progress through expected results and activity logs.
+
+## What is PROJEIC?
+
+PROJEIC supports two distinct project types:
+
+- **Institutional projects** — tied to university subjects (ramos) at EIC. These projects are linked to a `Subject` record and may have professors assigned as supervisors.
+- **Internal projects** — standalone projects not associated with a university course, used for independent or cross-departmental engineering work.
+
+Both project types share the same API surface and support the same set of features: task boards, sprints, member roles, notifications, file attachments, and expected results.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Framework | NestJS 11 |
+| API | GraphQL (Apollo Server 5) |
+| Database | PostgreSQL via Prisma ORM 6 |
+| Authentication | Google OAuth 2.0 + JWT |
+| File storage | AWS S3 (presigned URLs) |
+| Runtime | Node.js 22 |
+
+## Base URLs
+
+The API runs on port `4000` by default and mounts all routes under the `/projeic/api` global prefix.
+
+| Endpoint | URL |
+|---|---|
+| Base | `http://localhost:4000/projeic/api` |
+| GraphQL | `http://localhost:4000/projeic/api/graphql` |
+| File uploads | `http://localhost:4000/projeic/api/uploads/` |
+
+The GraphQL endpoint serves both the API and the Apollo Sandbox playground (enabled in all environments).
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Authenticate with Google OAuth, get a JWT token, and make your first GraphQL query in minutes.
+  </Card>
+  <Card title="Authentication" icon="lock" href="/auth/overview">
+    Learn how Google OAuth and JWT tokens work together to secure every request.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Explore all available queries and mutations in the GraphQL schema.
+  </Card>
+  <Card title="Projects" icon="folder" href="/concepts/projects">
+    Understand institutional vs. internal projects, statuses, methodologies, and member roles.
+  </Card>
+</CardGroup>

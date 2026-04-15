@@ -1,0 +1,111 @@
+---
+title: "Google OAuth 2.0 login flow"
+description: "Walk through the Google OAuth 2.0 redirect flow in PROJEIC — from initiating login to receiving a JWT token for API authentication."
+---
+
+PROJEIC delegates identity verification entirely to Google. Your application never handles passwords — it redirects users to Google, receives a confirmation, and gets back a JWT token it can use immediately. This page walks through each step of that flow.
+
+<Info>
+  User accounts are created automatically on first login. PROJEIC uses the name, email, and avatar from the user's Google profile to populate the new account. No additional sign-up step is required.
+</Info>
+
+## The login flow
+
+<Steps>
+  <Step title="Redirect the user to Google">
+    Send the user's browser to the Google OAuth endpoint. You can do this with a plain link, a button, or a programmatic redirect.
+
+    ```bash
+    GET /projeic/api/auth/google
+    ```
+
+    PROJEIC requests two OAuth scopes from Google: `email` and `profile`. The user will see a consent screen listing those permissions.
+  </Step>
+
+  <Step title="User authenticates with Google">
+    Google presents its standard sign-in and consent screen. The user selects their account and grants PROJEIC access to their email address and basic profile information (name and avatar).
+
+    You do not need to do anything in this step — it happens entirely on Google's side.
+  </Step>
+
+  <Step title="Backend processes the callback">
+    After the user consents, Google redirects to the PROJEIC callback URL (`/projeic/api/auth/google/callback`). The server:
+
+    1. Exchanges the authorization code for the user's Google profile.
+    2. Looks up the user in the database by email address.
+    3. If no account exists, creates one using the name, email, and avatar from the Google profile.
+    4. Signs a JWT containing the user's ID, email, name, avatar, and admin status.
+
+    Returning users have their existing account retrieved — the Google profile data is not re-synced on subsequent logins.
+  </Step>
+
+  <Step title="Frontend receives the token">
+    PROJEIC redirects the user's browser to your configured `FRONTEND_URL` with the JWT in the query string:
+
+    ```
+    https://your-frontend.com/projeic/auth/success?token=<jwt>
+    ```
+
+    Your `/projeic/auth/success` page is responsible for reading the token from the URL and storing it for subsequent API requests.
+
+    The following JavaScript snippet extracts the token from the URL:
+
+    ```javascript
+    // On your /projeic/auth/success page
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+
+    if (token) {
+      // Store the token — localStorage is convenient for SPAs,
+      // but consider a more secure storage strategy for production.
+      localStorage.setItem('projeic_token', token);
+
+      // Remove the token from the URL to avoid it appearing in logs or history
+      window.history.replaceState({}, '', window.location.pathname);
+
+      // Redirect to the main app
+      window.location.href = '/projeic/dashboard';
+    } else {
+      // Handle the case where no token was received
+      console.error('Authentication failed: no token in redirect URL');
+    }
+    ```
+  </Step>
+
+  <Step title="Use the token in API requests">
+    Include the stored token in the `Authorization` header of every GraphQL request.
+
+    ```javascript
+    const token = localStorage.getItem('projeic_token');
+
+    const response = await fetch('http://localhost:4000/projeic/api/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ query: '{ me { userId name email } }' }),
+    });
+
+    const data = await response.json();
+    console.log(data.data.me);
+    ```
+  </Step>
+</Steps>
+
+## New vs. returning users
+
+| Scenario | Behavior |
+|---|---|
+| First login | Account is created automatically using the Google profile (name, email, avatar URL) |
+| Returning user | Existing account is retrieved by email; profile data is not updated |
+| Admin status | Set manually in the database; not derived from Google |
+
+## What PROJEIC requests from Google
+
+The OAuth flow requests the following Google scopes:
+
+- **`email`** — the user's verified email address
+- **`profile`** — the user's full name, given name, family name, and profile photo URL
+
+No other Google data is accessed.

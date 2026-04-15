@@ -1,0 +1,135 @@
+---
+title: "Project members and roles in PROJEIC"
+description: "Understand how PROJEIC project membership works — roles (Leader, Supervisor, Student, External), invitation flow, and member status management."
+---
+
+Every user who participates in a project does so as a `ProjectMember`. Membership records join a user to a project with a specific role and a status that reflects where they are in the invitation flow. The creator of a project is automatically added as an `ACTIVE` member with the `LEADER` role.
+
+## Project roles
+
+<CardGroup cols={2}>
+  <Card title="LEADER" icon="crown">
+    Full control over the project. Can invite and remove members, update project settings, manage sprints, and approve task completion. There must always be at least one leader.
+  </Card>
+  <Card title="SUPERVISOR" icon="chalkboard-teacher">
+    Intended for professors overseeing institutional projects. Can review tasks and transition them between statuses, but cannot edit task content (title, description, priority, or dates).
+  </Card>
+  <Card title="STUDENT" icon="user-graduate">
+    Regular project participant. Can create tasks and update only the tasks assigned to them. Cannot set tasks to `DONE`, `BACKLOG`, or `CANCELLED`.
+  </Card>
+  <Card title="EXTERNAL" icon="user-tie">
+    External collaborator with read-only access to the project. Cannot edit or move any tasks.
+  </Card>
+</CardGroup>
+
+## Member statuses
+
+| Status | Description |
+|---|---|
+| `PENDING` | The user has been invited but has not yet accepted or rejected. |
+| `ACTIVE` | The user has accepted the invitation and is a full participant. |
+| `REJECTED` | The invitation was declined. The membership record is deleted on rejection. |
+
+## Invitation flow
+
+<Steps>
+  <Step title="Leader sends an invitation">
+    A project `LEADER` calls `addProjectMember` with the invitee's email address and their intended role. The invited user must already have a PROJEIC account.
+  </Step>
+  <Step title="Notification is delivered">
+    A `PROJECT_INVITATION` notification is created for the invited user. The notification includes the project name, the role they were invited as, and the project ID as `entityId`.
+  </Step>
+  <Step title="User responds to the invitation">
+    The invited user calls `respondToInvitation` with `accept: true` to join or `accept: false` to decline. The pending notification is deleted automatically upon response.
+  </Step>
+  <Step title="Membership becomes active">
+    On acceptance, the membership status is updated to `ACTIVE`. WIP limits on the project's board columns are recalculated to reflect the new team size. On rejection, the membership record is deleted entirely.
+  </Step>
+</Steps>
+
+<Note>
+  A user can only have one membership record per project (enforced by a unique constraint on `userId` + `projectId`). If a user already has a `PENDING` or `ACTIVE` membership, a new invitation will be rejected with a `409 Conflict` error.
+</Note>
+
+## GraphQL examples
+
+### Inviting a member
+
+```graphql
+mutation InviteMember {
+  addProjectMember(input: {
+    projectId: "cld1a2b3c4d5e6f7g8h9i0j"
+    email: "ana.gomez@uc.cl"
+    role: STUDENT
+  }) {
+    id
+    role
+    status
+    user {
+      id
+      name
+    }
+  }
+}
+```
+
+### Responding to an invitation
+
+```graphql
+# Accept the invitation
+mutation AcceptInvitation {
+  respondToInvitation(
+    projectId: "cld1a2b3c4d5e6f7g8h9i0j"
+    accept: true
+  ) {
+    id
+    role
+    status
+  }
+}
+
+# Decline the invitation
+mutation DeclineInvitation {
+  respondToInvitation(
+    projectId: "cld1a2b3c4d5e6f7g8h9i0j"
+    accept: false
+  )
+}
+```
+
+### Updating a member's role
+
+Only a project `LEADER` can change a member's role. Pass the membership record's `id` (not the user's ID) as `memberId`.
+
+```graphql
+mutation UpdateMemberRole {
+  updateProjectMemberRole(input: {
+    memberId: "clm1a2b3c4d5e6f7g8h9i0j"
+    role: SUPERVISOR
+  }) {
+    id
+    role
+    status
+    user {
+      id
+      name
+    }
+  }
+}
+```
+
+### Removing a member
+
+```graphql
+mutation RemoveMember {
+  removeProjectMember(memberId: "clm1a2b3c4d5e6f7g8h9i0j")
+}
+```
+
+<Warning>
+  Removing a member is permanent. If the removed user is later re-invited, they must go through the full invitation flow again. WIP limits are recalculated automatically after removal.
+</Warning>
+
+## WIP limit recalculation
+
+When a member joins or leaves a project, PROJEIC automatically recalculates the WIP (Work-In-Progress) limits on board columns named "En progreso", "En revisión", "In Progress", or "Review". The new limit is `ceil(activeMembers × 1.5)`. This ensures that board column capacity scales with team size.

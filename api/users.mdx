@@ -1,0 +1,82 @@
+---
+title: "Users resource — GraphQL API reference"
+description: "GraphQL queries for accessing user profile data in PROJEIC, including the me query, User type fields, and PublicUser type used in project contexts."
+---
+
+PROJEIC user accounts are created automatically the first time a person signs in with Google OAuth. There is no registration flow or manual user creation endpoint. The API exposes a single `me` query that returns the authenticated user's full profile. In contexts where user data is embedded in other types — such as project membership or task assignment — PROJEIC returns a `PublicUser` object containing only the fields safe for public display.
+
+## The `User` type
+
+The `User` type represents the full profile of an authenticated user. It is only returned by the `me` query.
+
+<ResponseField name="userId" type="ID!" required>
+  Unique identifier for the user, generated as a cuid.
+</ResponseField>
+
+<ResponseField name="name" type="String!" required>
+  Display name of the user, sourced from their Google account.
+</ResponseField>
+
+<ResponseField name="email" type="String!" required>
+  Email address associated with the user's Google account.
+</ResponseField>
+
+<ResponseField name="avatarUrl" type="String">
+  URL of the user's profile photo from Google. May be `null` if no photo is available.
+</ResponseField>
+
+<ResponseField name="isAdmin" type="Boolean">
+  When `true`, the user has platform-wide administrative privileges.
+</ResponseField>
+
+---
+
+## The `PublicUser` type
+
+`PublicUser` is a reduced view of a user's profile used in contexts where full profile data should not be exposed, such as within `ProjectMemberEntity` and `SubjectEntity`.
+
+<ResponseField name="id" type="ID!" required>
+  Unique identifier for the user.
+</ResponseField>
+
+<ResponseField name="name" type="String!" required>
+  Display name of the user.
+</ResponseField>
+
+<ResponseField name="avatarUrl" type="String">
+  URL of the user's profile photo. May be `null`.
+</ResponseField>
+
+---
+
+## Queries
+
+### `me`
+
+Returns the full profile of the currently authenticated user. This query requires a valid authentication token.
+
+```graphql
+query Me {
+  me {
+    userId
+    name
+    email
+    avatarUrl
+    isAdmin
+  }
+}
+```
+
+The `me` query takes no arguments. Authentication is handled via the session context established during the Google OAuth flow.
+
+---
+
+## Notes on user management
+
+<Note>
+  Users are provisioned automatically on first Google OAuth login. There is no API mutation to create, update, or delete users directly. User data such as name and avatar are sourced from Google and are not editable through the PROJEIC API.
+</Note>
+
+<Note>
+  The `isAdmin` field is managed at the platform level and cannot be set through the public API.
+</Note>

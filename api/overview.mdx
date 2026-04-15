@@ -1,0 +1,115 @@
+---
+title: "PROJEIC GraphQL API overview"
+description: "PROJEIC exposes a single GraphQL endpoint at /projeic/api/graphql. Learn how to send queries, pass auth headers, and handle errors."
+---
+
+PROJEIC exposes a single GraphQL endpoint for all data operations. Every feature — projects, tasks, sprints, boards, members, notifications, and more — is accessible through this endpoint using standard GraphQL queries and mutations. The schema is code-first, meaning it is auto-generated from NestJS decorators and reflects the exact shape of the server's resolvers.
+
+## Endpoint
+
+All requests are sent as HTTP `POST` to the following path:
+
+```
+POST /projeic/api/graphql
+```
+
+## Request format
+
+Set the `Content-Type` header to `application/json` and send a JSON body with a `query` string and an optional `variables` object.
+
+<ParamField body="query" type="string" required>
+  The GraphQL query or mutation string.
+</ParamField>
+
+<ParamField body="variables" type="object">
+  A key-value map of variable values referenced in the query string.
+</ParamField>
+
+## Authentication
+
+<Warning>
+  Every request except the `health` query requires a valid JWT. Requests without a token, or with an expired or malformed token, receive an `UNAUTHENTICATED` error.
+</Warning>
+
+Pass the JWT as a Bearer token in the `Authorization` header on every authenticated request:
+
+```
+Authorization: Bearer <jwt>
+```
+
+The token is issued by the PROJEIC authentication service upon login. Store it securely and include it with every API call.
+
+## Example request
+
+The following `curl` command queries the authenticated user's profile:
+
+```bash
+curl --request POST \
+  --url https://your-host/projeic/api/graphql \
+  --header 'Authorization: Bearer <jwt>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "query": "{ me { userId name email isAdmin } }"
+  }'
+```
+
+A successful response returns a `data` key containing the requested fields:
+
+```json
+{
+  "data": {
+    "me": {
+      "userId": "clxyz123",
+      "name": "Ada Lovelace",
+      "email": "ada@example.com",
+      "isAdmin": false
+    }
+  }
+}
+```
+
+## Error format
+
+GraphQL errors are returned in a top-level `errors` array alongside any partial `data`. Each error object contains a human-readable `message` and an `extensions` block with a machine-readable `code`.
+
+```json
+{
+  "errors": [
+    {
+      "message": "Unauthorized",
+      "extensions": {
+        "code": "UNAUTHENTICATED"
+      }
+    }
+  ],
+  "data": null
+}
+```
+
+<Note>
+  HTTP status codes are not a reliable signal for GraphQL errors. Always inspect the `errors` array in the response body.
+</Note>
+
+Common extension codes:
+
+| Code | Meaning |
+|---|---|
+| `UNAUTHENTICATED` | Token is missing, expired, or invalid |
+| `FORBIDDEN` | Token is valid but the user lacks permission |
+| `BAD_USER_INPUT` | Input validation failed |
+| `INTERNAL_SERVER_ERROR` | Unexpected server-side failure |
+
+## Schema generation
+
+The schema is generated automatically from NestJS resolver decorators using the code-first approach. The file at `src/schema.gql` is the authoritative source of truth for all available types, queries, and mutations.
+
+## Explore the API
+
+<CardGroup cols={2}>
+  <Card title="Queries reference" icon="magnifying-glass" href="/api/queries">
+    Complete reference for all available queries — projects, tasks, sprints, boards, users, metrics, subjects, and notifications.
+  </Card>
+  <Card title="Mutations reference" icon="pen-to-square" href="/api/mutations">
+    Complete reference for all available mutations — create and manage projects, tasks, sprints, boards, members, and notifications.
+  </Card>
+</CardGroup>

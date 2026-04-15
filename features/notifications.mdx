@@ -1,0 +1,145 @@
+---
+title: "Notifications: invitations, tasks, and mentions"
+description: "PROJEIC sends notifications for project invitations, task assignments, and mentions. Query and mark notifications as read via GraphQL."
+---
+
+PROJEIC generates notifications automatically when specific events occur — a user is invited to a project, a task is assigned to them, or they are mentioned in a comment. Notifications are scoped to the authenticated user and are surfaced through a single GraphQL query. Clients can filter to unread-only results and mark individual or all notifications as read.
+
+## Notification types
+
+<CardGroup cols={2}>
+  <Card title="PROJECT_INVITATION" icon="envelope">
+    Sent when another user invites you to join a project. The `entityId` field contains the `projectId` of the relevant project.
+  </Card>
+  <Card title="TASK_ASSIGNED" icon="circle-check">
+    Sent when you are assigned to a task. The `entityId` field contains the `taskId` of the relevant task.
+  </Card>
+  <Card title="COMMENTARY_MENTION" icon="at">
+    Sent when your username is mentioned in a task comment. The `entityId` references the associated entity.
+  </Card>
+  <Card title="SYSTEM_ALERT" icon="bell">
+    Reserved for platform-level announcements and administrative messages. No specific `entityId` is guaranteed.
+  </Card>
+</CardGroup>
+
+## Data model
+
+Each `NotificationEntity` exposes the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `ID!` | Unique identifier |
+| `type` | `NotificationType!` | One of the four types above |
+| `title` | `String!` | Short summary (e.g. "New project invitation") |
+| `message` | `String` | Optional longer description |
+| `isRead` | `Boolean!` | Whether the notification has been marked as read |
+| `entityId` | `ID` | ID of the related entity (project or task) |
+| `createdAt` | `DateTime!` | Timestamp when the notification was created |
+
+<Info>
+Use `entityId` to deep-link users to the relevant resource. For `PROJECT_INVITATION` notifications, pass `entityId` to `respondToInvitation`. For `TASK_ASSIGNED` notifications, use it to navigate to the task detail view.
+</Info>
+
+## Queries
+
+### Fetch your notifications
+
+`myNotifications` returns all notifications for the authenticated user, optionally filtered to unread items only.
+
+```graphql
+query GetMyNotifications {
+  myNotifications(unreadOnly: false) {
+    id
+    type
+    title
+    message
+    isRead
+    entityId
+    createdAt
+  }
+}
+```
+
+To retrieve only unread notifications — useful for a notification badge count or a focused inbox view:
+
+```graphql
+query GetUnreadNotifications {
+  myNotifications(unreadOnly: true) {
+    id
+    type
+    title
+    message
+    entityId
+    createdAt
+  }
+}
+```
+
+<Tip>
+Poll `myNotifications(unreadOnly: true)` at a regular interval (e.g. every 30 seconds) to keep a notification badge up to date, or use a WebSocket subscription if your client supports it.
+</Tip>
+
+## Mutations
+
+### Mark a single notification as read
+
+Pass the notification's `id` to `markNotificationAsRead`. The mutation returns the updated `NotificationEntity` with `isRead: true`.
+
+```graphql
+mutation MarkOneAsRead($id: ID!) {
+  markNotificationAsRead(id: $id) {
+    id
+    isRead
+    type
+    title
+  }
+}
+```
+
+### Mark all notifications as read
+
+`markAllNotificationsAsRead` marks every unread notification for the authenticated user as read in a single call. It returns `true` on success.
+
+```graphql
+mutation MarkAllAsRead {
+  markAllNotificationsAsRead
+}
+```
+
+<Note>
+`markAllNotificationsAsRead` affects all unread notifications for the current user, regardless of type or age. There is no way to scope it to a specific notification type in a single call.
+</Note>
+
+## Handling invitations from notifications
+
+When a `PROJECT_INVITATION` notification arrives, the `entityId` is the `projectId`. Pass it to `respondToInvitation` to accept or decline:
+
+```graphql
+mutation RespondToInvitation($projectId: ID!, $accept: Boolean!) {
+  respondToInvitation(projectId: $projectId, accept: $accept) {
+    id
+    status
+    role
+  }
+}
+```
+
+A typical client flow for handling an invitation notification looks like this:
+
+```javascript
+async function handleInvitationNotification(notification) {
+  const { id: notificationId, entityId: projectId } = notification;
+
+  // Accept the invitation
+  await graphqlClient.mutate({
+    mutation: RESPOND_TO_INVITATION,
+    variables: { projectId, accept: true },
+  });
+
+  // Mark the notification as read
+  await graphqlClient.mutate({
+    mutation: MARK_NOTIFICATION_AS_READ,
+    variables: { id: notificationId },
+  });
+}
+```

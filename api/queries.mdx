@@ -1,0 +1,658 @@
+---
+title: "PROJEIC GraphQL queries reference"
+description: "Complete reference for all PROJEIC GraphQL queries — projects, tasks, sprints, boards, users, metrics, subjects, and notifications."
+---
+
+PROJEIC exposes queries for every domain in the platform. All queries are sent as `POST` requests to `/projeic/api/graphql` with an `Authorization: Bearer <jwt>` header. The sections below document every available query, its arguments, return type, and a usage example. See the [API overview](/api/overview) for request format details.
+
+---
+
+## Projects
+
+These queries retrieve project listings and individual project records. The `filter` argument supports pagination, search, and status filtering across all project queries that accept it.
+
+### `findAll`
+
+Returns a paginated list of all projects visible to the authenticated user.
+
+```graphql
+query FindAll($filter: ProjectsFilterInput, $includeMembers: Boolean) {
+  findAll(filter: $filter, includeMembers: $includeMembers) {
+    total
+    skip
+    take
+    items {
+      id
+      name
+      status
+      methodology
+      isPublic
+      isArchived
+      createdAt
+    }
+  }
+}
+```
+
+<ParamField query="filter" type="ProjectsFilterInput">
+  Optional filters and pagination controls.
+
+  <Expandable title="ProjectsFilterInput fields">
+    <ParamField query="search" type="string">
+      Case-insensitive name search.
+    </ParamField>
+    <ParamField query="status" type="ProjectStatus">
+      Filter by lifecycle status: `ACTIVE`, `STARTING`, `ON_HOLD`, `COMPLETED`, or `CANCELLED`.
+    </ParamField>
+    <ParamField query="methodology" type="ProjectMethodology">
+      Filter by methodology: `KANBAN`, `SCRUM`, `SCRUMBAN`, or `NONE`.
+    </ParamField>
+    <ParamField query="isPublic" type="boolean">
+      Filter by visibility.
+    </ParamField>
+    <ParamField query="isInstitutional" type="boolean">
+      Filter institutional projects.
+    </ParamField>
+    <ParamField query="myRole" type="string">
+      Filter by the authenticated user's role in the project.
+    </ParamField>
+    <ParamField query="subjectId" type="string">
+      Filter by subject association.
+    </ParamField>
+    <ParamField query="includeArchived" type="boolean" default="false">
+      Include soft-deleted projects.
+    </ParamField>
+    <ParamField query="skip" type="number" default="0">
+      Offset for pagination.
+    </ParamField>
+    <ParamField query="take" type="number" default="20">
+      Maximum results to return (1–100).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField query="includeMembers" type="boolean">
+  When `true`, the `members` field is populated on each returned project.
+</ParamField>
+
+**Returns:** `PaginatedProjects!`
+
+---
+
+### `myProjects`
+
+Returns a paginated list of projects where the authenticated user is a member. Accepts the same arguments as `findAll`.
+
+```graphql
+query MyProjects {
+  myProjects(filter: { status: ACTIVE, take: 10 }) {
+    total
+    items {
+      id
+      name
+      myRole
+      methodology
+    }
+  }
+}
+```
+
+<ParamField query="filter" type="ProjectsFilterInput">
+  Same filter options as `findAll`.
+</ParamField>
+
+<ParamField query="includeMembers" type="boolean">
+  Populate the `members` field on each project.
+</ParamField>
+
+**Returns:** `PaginatedProjects!`
+
+---
+
+### `findOne`
+
+Returns a single project by its ID.
+
+```graphql
+query FindOne($id: String!) {
+  findOne(id: $id) {
+    id
+    name
+    description
+    color
+    status
+    methodology
+    mode
+    isPublic
+    isArchived
+    isInstitutional
+    myRole
+    subjectId
+    createdAt
+    updatedAt
+    members {
+      id
+      role
+      status
+      user {
+        id
+        name
+        avatarUrl
+      }
+    }
+  }
+}
+```
+
+<ParamField query="id" type="string" required>
+  The unique project ID (cuid).
+</ParamField>
+
+**Returns:** `ProjectEntity!`
+
+---
+
+## Tasks
+
+Task queries let you retrieve tasks scoped to a project or sprint, as well as tasks assigned to the authenticated user across all projects.
+
+### `tasksByProject`
+
+Returns all tasks belonging to a project. Optionally filter to a single sprint.
+
+```graphql
+query TasksByProject($projectId: String!, $sprintId: String) {
+  tasksByProject(projectId: $projectId, sprintId: $sprintId) {
+    id
+    title
+    status
+    priority
+    boardId
+    sprintId
+    assigneeId
+    creatorId
+    dueDate
+    position
+  }
+}
+```
+
+<ParamField query="projectId" type="string" required>
+  The project to retrieve tasks from.
+</ParamField>
+
+<ParamField query="sprintId" type="string">
+  When provided, returns only tasks assigned to this sprint.
+</ParamField>
+
+**Returns:** `[Task!]!`
+
+---
+
+### `pendingTasksByUserId`
+
+Returns all tasks assigned to the authenticated user that are not yet complete, across all projects.
+
+```graphql
+query PendingTasks {
+  pendingTasksByUserId {
+    id
+    title
+    priority
+    status
+    dueDate
+    projectId
+  }
+}
+```
+
+**Returns:** `[Task!]!`
+
+---
+
+## Sprints & boards
+
+### `sprintsByProject`
+
+Returns all sprints for a given project.
+
+```graphql
+query SprintsByProject($projectId: String!) {
+  sprintsByProject(projectId: $projectId) {
+    id
+    name
+    goal
+    status
+    startDate
+    endDate
+    projectId
+  }
+}
+```
+
+<ParamField query="projectId" type="string" required>
+  The project to retrieve sprints from.
+</ParamField>
+
+**Returns:** `[Sprint!]!`
+
+---
+
+### `boardsByProject`
+
+Returns all Kanban boards configured for a project.
+
+```graphql
+query BoardsByProject($projectId: String!) {
+  boardsByProject(projectId: $projectId) {
+    id
+    name
+    color
+    position
+    wipLimit
+    projectId
+  }
+}
+```
+
+<ParamField query="projectId" type="string" required>
+  The project to retrieve boards from.
+</ParamField>
+
+**Returns:** `[Board!]!`
+
+---
+
+### `sprintBurndown`
+
+Returns a series of burndown data points for a sprint, suitable for rendering a burndown chart.
+
+```graphql
+query SprintBurndown($sprintId: String!) {
+  sprintBurndown(sprintId: $sprintId) {
+    date
+    dayLabel
+    ideal
+    real
+  }
+}
+```
+
+<ParamField query="sprintId" type="string" required>
+  The sprint to compute burndown data for.
+</ParamField>
+
+**Returns:** `[BurndownDataPoint!]!`
+
+Each data point contains:
+
+<ResponseField name="date" type="string" required>
+  ISO date string for the data point.
+</ResponseField>
+<ResponseField name="dayLabel" type="string" required>
+  Human-readable day label (e.g. "Mon 12").
+</ResponseField>
+<ResponseField name="ideal" type="number">
+  Ideal remaining story points for this day.
+</ResponseField>
+<ResponseField name="real" type="number">
+  Actual remaining story points recorded for this day.
+</ResponseField>
+
+---
+
+## Metrics & activity
+
+### `projectMetrics`
+
+Returns aggregate task metrics for a project.
+
+```graphql
+query ProjectMetrics($projectId: String!) {
+  projectMetrics(projectId: $projectId) {
+    totalTasks
+    completedTasks
+    inReviewTasks
+    overdueTasksCount
+    activityLast7Days
+    overdueTasksList {
+      id
+      title
+      dueDate
+      priority
+    }
+    tasksByColumn {
+      boardId
+      name
+      color
+      count
+    }
+  }
+}
+```
+
+<ParamField query="projectId" type="string" required>
+  The project to compute metrics for.
+</ParamField>
+
+**Returns:** `ProjectMetrics!`
+
+---
+
+### `myRecentFeed`
+
+Returns the authenticated user's recent activity log entries across all projects.
+
+```graphql
+query MyRecentFeed {
+  myRecentFeed {
+    id
+    action
+    entity
+    entityId
+    projectId
+    meta
+    createdAt
+  }
+}
+```
+
+**Returns:** `[ActivityLog!]!`
+
+---
+
+### `myWeeklyActivityPoints`
+
+Returns the number of activity points earned by the authenticated user in the current week.
+
+```graphql
+query MyWeeklyActivityPoints {
+  myWeeklyActivityPoints
+}
+```
+
+**Returns:** `Int!`
+
+---
+
+### `activityLogsByProject`
+
+Returns all activity log entries for a specific project.
+
+```graphql
+query ActivityLogsByProject($projectId: String!) {
+  activityLogsByProject(projectId: $projectId) {
+    id
+    action
+    entity
+    entityId
+    meta
+    createdAt
+    user {
+      userId
+      name
+      avatarUrl
+    }
+  }
+}
+```
+
+<ParamField query="projectId" type="string" required>
+  The project to retrieve activity logs for.
+</ParamField>
+
+**Returns:** `[ActivityLog!]!`
+
+---
+
+## Users & auth
+
+### `me`
+
+Returns the profile of the currently authenticated user.
+
+```graphql
+query Me {
+  me {
+    userId
+    name
+    email
+    avatarUrl
+    isAdmin
+  }
+}
+```
+
+**Returns:** `User!`
+
+<Note>
+  This query requires a valid JWT. There is no unauthenticated variant.
+</Note>
+
+---
+
+## Notifications
+
+### `myNotifications`
+
+Returns notifications for the authenticated user. Pass `unreadOnly: true` to filter to unread items only.
+
+```graphql
+query MyNotifications($unreadOnly: Boolean!) {
+  myNotifications(unreadOnly: $unreadOnly) {
+    id
+    title
+    message
+    type
+    isRead
+    entityId
+    createdAt
+  }
+}
+```
+
+<ParamField query="unreadOnly" type="boolean" required default="false">
+  When `true`, only unread notifications are returned.
+</ParamField>
+
+**Returns:** `[NotificationEntity!]!`
+
+Notification types (`NotificationType` enum):
+
+| Value | Description |
+|---|---|
+| `TASK_ASSIGNED` | A task was assigned to the user |
+| `PROJECT_INVITATION` | The user was invited to a project |
+| `COMMENTARY_MENTION` | The user was mentioned in a comment |
+| `SYSTEM_ALERT` | A system-generated alert |
+
+---
+
+## Subjects
+
+### `subjects`
+
+Returns all subjects registered in the system.
+
+```graphql
+query Subjects {
+  subjects {
+    id
+    name
+    code
+    period
+    professors {
+      id
+      name
+      avatarUrl
+    }
+  }
+}
+```
+
+**Returns:** `[SubjectEntity!]!`
+
+---
+
+### `subject`
+
+Returns a single subject by ID.
+
+```graphql
+query Subject($id: String!) {
+  subject(id: $id) {
+    id
+    name
+    code
+    period
+    professors {
+      id
+      name
+    }
+  }
+}
+```
+
+<ParamField query="id" type="string" required>
+  The subject ID.
+</ParamField>
+
+**Returns:** `SubjectEntity!`
+
+---
+
+## Expected results
+
+### `expectedResultsByProject`
+
+Returns all expected results (deliverables) linked to a project.
+
+```graphql
+query ExpectedResultsByProject($projectId: String!) {
+  expectedResultsByProject(projectId: $projectId) {
+    id
+    title
+    description
+    status
+    progress
+    ownerId
+    projectId
+    createdAt
+    updatedAt
+    owner {
+      userId
+      name
+    }
+    evidences {
+      id
+      type
+      url
+      fileKey
+      createdAt
+    }
+    history {
+      id
+      previousStatus
+      newStatus
+      reason
+      createdAt
+    }
+  }
+}
+```
+
+<ParamField query="projectId" type="string" required>
+  The project to retrieve expected results for.
+</ParamField>
+
+**Returns:** `[ExpectedResult!]!`
+
+---
+
+## Admin
+
+<Warning>
+  The count queries below are intended for administrative dashboards. Access may be restricted based on the user's `isAdmin` flag.
+</Warning>
+
+### `health`
+
+Returns a simple health-check string. This is the only query that does not require authentication.
+
+```graphql
+query Health {
+  health
+}
+```
+
+**Returns:** `String!`
+
+---
+
+### `countStudentsRegistered`
+
+Returns the total number of students registered in the system.
+
+```graphql
+query CountStudents {
+  countStudentsRegistered
+}
+```
+
+**Returns:** `Int!`
+
+---
+
+### `countProfessorsRegistered`
+
+Returns the total number of professors registered in the system.
+
+```graphql
+query CountProfessors {
+  countProfessorsRegistered
+}
+```
+
+**Returns:** `Int!`
+
+---
+
+### `countExternalProfessorsRegistered`
+
+Returns the total number of external professors registered in the system.
+
+```graphql
+query CountExternalProfessors {
+  countExternalProfessorsRegistered
+}
+```
+
+**Returns:** `Int!`
+
+---
+
+### `countSemesters`
+
+Returns the total number of semesters recorded in the system.
+
+```graphql
+query CountSemesters {
+  countSemesters
+}
+```
+
+**Returns:** `Int!`
+
+---
+
+### `countSubjects`
+
+Returns the total number of subjects registered in the system.
+
+```graphql
+query CountSubjects {
+  countSubjects
+}
+```
+
+**Returns:** `Int!`

@@ -1,0 +1,191 @@
+---
+title: "File uploads with AWS S3 presigned URLs"
+description: "Upload files to PROJEIC using S3 presigned URLs — request an upload URL via GraphQL, then PUT the file directly to S3 from the client."
+---
+
+PROJEIC uses a two-step upload pattern backed by AWS S3. Rather than routing file bytes through the API server, the client requests a short-lived presigned URL and then uploads the file directly to S3 from the browser or mobile app. This keeps the API server stateless with respect to file data and enables large uploads without hitting request-body size limits.
+
+Once a file is uploaded, the returned `fileKey` is a stable reference you store in your application data — for example, as `evidenceFileKey` on an expected result status update, or as the source for a displayed image.
+
+<Warning>
+Presigned upload URLs are single-use and expire within a few minutes of being issued. Request the URL immediately before performing the upload, and do not cache or reuse URLs across sessions.
+</Warning>
+
+## Upload flow
+
+<Steps>
+  <Step title="Request a presigned URL">
+    Call the `getUploadPresignedUrl` mutation with the file's MIME type and desired filename. The API returns an `uploadUrl` (the S3 presigned URL) and a `fileKey` (the object key under which the file will be stored).
+
+    ```graphql
+    mutation GetUploadUrl($contentType: String!, $fileName: String!) {
+      getUploadPresignedUrl(contentType: $contentType, fileName: $fileName) {
+        uploadUrl
+        fileKey
+      }
+    }
+    ```
+
+    Example variables:
+
+    ```json
+    {
+      "contentType": "application/pdf",
+      "fileName": "prototype-review-2026.pdf"
+    }
+    ```
+
+    Example response:
+
+    ```json
+    {
+      "data": {
+        "getUploadPresignedUrl": {
+          "uploadUrl": "https://your-bucket.s3.amazonaws.com/uploads/prototype-review-2026.pdf?X-Amz-Signature=...",
+          "fileKey": "uploads/prototype-review-2026.pdf"
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="PUT the file directly to S3">
+    Use the `uploadUrl` from the previous step as the target of an HTTP `PUT` request. Set the `Content-Type` header to the same MIME type you provided in the mutation. Do not include authentication headers — the presigned URL already encodes the necessary credentials.
+
+    ```javascript
+    async function uploadFile(file) {
+      // Step 1: Get the presigned URL
+      const { data } = await graphqlClient.mutate({
+        mutation: GET_UPLOAD_PRESIGNED_URL,
+        variables: {
+          contentType: file.type,
+          fileName: file.name,
+        },
+      });
+
+      const { uploadUrl, fileKey } = data.getUploadPresignedUrl;
+
+      // Step 2: PUT the file directly to S3
+      await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
+
+      // Return the fileKey for storage in your application
+      return fileKey;
+    }
+    ```
+  </Step>
+
+  <Step title="Store the fileKey">
+    After the `PUT` succeeds, persist the `fileKey` in your application. The key is the stable reference to the uploaded object. Use it wherever the API accepts a file reference — for example, when attaching evidence to an expected result:
+
+    ```graphql
+    mutation AttachFileEvidence($resultId: String!, $fileKey: String!) {
+      updateResultStatus(input: {
+        resultId: $resultId
+        status: IN_REVIEW
+        evidenceFileKey: $fileKey
+        evidenceType: "PDF"
+        reason: "Submitting the final report PDF for review."
+      }) {
+        id
+        status
+        evidences {
+          id
+          type
+          fileKey
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Supported content types
+
+The `contentType` parameter accepts any valid MIME type string. Common values used in PROJEIC:
+
+| Content type | Evidence type | Typical use |
+|---|---|---|
+| `image/png`, `image/jpeg`, `image/webp` | `"IMAGE"` | Screenshots, diagrams, design mockups |
+| `application/pdf` | `"PDF"` | Reports, signed forms, academic documents |
+| `application/zip` | `"URL"` (or omit evidence type) | Source code archives |
+
+<Info>
+The `evidenceType` field on `UpdateResultStatusInput` is a free-form string. Use `"URL"`, `"IMAGE"`, or `"PDF"` for consistency with how the front-end categorises and displays evidence items.
+</Info>
+
+## Local file serving
+
+When running PROJEIC locally without an S3 bucket configured, uploaded files are stored on disk and served from the static path:
+
+```bash
+/projeic/api/uploads/<filename>
+```
+
+The `fileKey` returned by the mutation will reflect this path in local development. No changes are needed in your client code — the upload flow is identical.
+
+<Note>
+Local file storage is not suitable for production. Configure `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` environment variables before deploying to ensure files are stored durably in S3.
+</Note>
+
+## Complete browser example
+
+The following snippet shows a file input handler that performs the full two-step upload and then attaches the result as evidence on an expected result.
+
+```javascript
+async function handleEvidenceUpload(event, resultId) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  try {
+    // Step 1: Request presigned URL
+    const { data } = await graphqlClient.mutate({
+      mutation: GET_UPLOAD_PRESIGNED_URL,
+      variables: { contentType: file.type, fileName: file.name },
+    });
+    const { uploadUrl, fileKey } = data.getUploadPresignedUrl;
+
+    // Step 2: Upload directly to S3
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`S3 upload failed: ${uploadResponse.status}`);
+    }
+
+    // Step 3: Attach as evidence on the expected result
+    await graphqlClient.mutate({
+      mutation: UPDATE_RESULT_STATUS,
+      variables: {
+        input: {
+          resultId,
+          status: "IN_REVIEW",
+          evidenceFileKey: fileKey,
+          evidenceType: file.type.startsWith("image/") ? "IMAGE" : "PDF",
+        },
+      },
+    });
+
+    console.log("Evidence uploaded successfully:", fileKey);
+  } catch (error) {
+    console.error("Upload failed:", error);
+  }
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Expected results" icon="clipboard-check" href="/features/expected-results">
+    See how file keys are used as evidence on expected result status transitions.
+  </Card>
+  <Card title="Notifications" icon="bell" href="/features/notifications">
+    Users receive notifications when tasks are assigned or project invitations arrive.
+  </Card>
+</CardGroup>

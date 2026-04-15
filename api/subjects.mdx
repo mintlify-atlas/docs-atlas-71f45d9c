@@ -1,0 +1,232 @@
+---
+title: "Subjects resource — GraphQL API reference"
+description: "GraphQL queries and mutations for managing university subjects (ramos) in PROJEIC, which link institutional projects to academic courses."
+---
+
+Subjects represent university courses (known as *ramos* in Chilean academic institutions) and are the primary way to organize institutional projects under a specific academic context. Each subject has an optional course code, a semester period, and a list of professors responsible for it. Projects linked to a subject via `subjectId` inherit the institutional context, making it possible to group, filter, and report on projects by course.
+
+## The `SubjectEntity` type
+
+<ResponseField name="id" type="ID!" required>
+  Unique identifier for the subject, generated as a cuid.
+</ResponseField>
+
+<ResponseField name="name" type="String!" required>
+  Full name of the university subject (e.g. "Software Engineering II").
+</ResponseField>
+
+<ResponseField name="code" type="String">
+  Optional short course code as used by the institution (e.g. "ICI4240"). May be `null`.
+</ResponseField>
+
+<ResponseField name="period" type="String!" required>
+  The academic period this subject belongs to (e.g. `"2026-1"`, `"Semester 1 2026"`).
+</ResponseField>
+
+<ResponseField name="professors" type="[PublicUser!]">
+  List of professors assigned to this subject. Each entry is a [`PublicUser`](/api/users#the-publicuser-type) containing `id`, `name`, and `avatarUrl`.
+</ResponseField>
+
+---
+
+## Queries
+
+### `subjects`
+
+Returns all subjects in the system.
+
+```graphql
+query Subjects {
+  subjects {
+    id
+    name
+    code
+    period
+    professors {
+      id
+      name
+      avatarUrl
+    }
+  }
+}
+```
+
+### `subject`
+
+Returns a single subject by its ID.
+
+```graphql
+query Subject($id: String!) {
+  subject(id: $id) {
+    id
+    name
+    code
+    period
+    professors {
+      id
+      name
+      avatarUrl
+    }
+  }
+}
+```
+
+<ParamField path="id" type="String!" required>
+  The ID of the subject to retrieve.
+</ParamField>
+
+---
+
+## Mutations
+
+### `createSubject`
+
+Creates a new subject. At least one professor ID must be provided in `professorIds`.
+
+```graphql
+mutation CreateSubject($input: CreateSubjectInput!) {
+  createSubject(input: $input) {
+    id
+    name
+    code
+    period
+    professors {
+      id
+      name
+    }
+  }
+}
+```
+
+**Variables:**
+
+```graphql
+{
+  "input": {
+    "name": "Software Engineering II",
+    "period": "2026-1",
+    "code": "ICI4240",
+    "professorIds": ["clx9usr0001", "clx9usr0002"]
+  }
+}
+```
+
+### `updateSubject`
+
+Updates an existing subject. All fields except `id` are optional.
+
+```graphql
+mutation UpdateSubject($input: UpdateSubjectInput!) {
+  updateSubject(input: $input) {
+    id
+    name
+    code
+    period
+    professors {
+      id
+      name
+    }
+  }
+}
+```
+
+**Example — updating the period and replacing the professor list:**
+
+```graphql
+{
+  "input": {
+    "id": "clx1sbj0001",
+    "period": "2026-2",
+    "professorIds": ["clx9usr0003"]
+  }
+}
+```
+
+### `removeSubject`
+
+Permanently deletes a subject by ID. Projects linked to this subject via `subjectId` have their `subjectId` set to `null` (cascade `SetNull`).
+
+```graphql
+mutation RemoveSubject($id: String!) {
+  removeSubject(id: $id) {
+    id
+    name
+  }
+}
+```
+
+<Warning>
+  Removing a subject does not delete any linked projects, but it does clear their `subjectId` field. Projects will no longer be associated with an academic context after their subject is removed.
+</Warning>
+
+---
+
+## `CreateSubjectInput`
+
+<ParamField path="name" type="String!" required>
+  Full name of the subject.
+</ParamField>
+
+<ParamField path="period" type="String!" required>
+  Academic period (e.g. `"2026-1"`).
+</ParamField>
+
+<ParamField path="code" type="String">
+  Optional course code.
+</ParamField>
+
+<ParamField path="professorIds" type="[String!]!" required>
+  List of user IDs to assign as professors for this subject. Must include at least one ID.
+</ParamField>
+
+---
+
+## `UpdateSubjectInput`
+
+<ParamField path="id" type="String!" required>
+  ID of the subject to update.
+</ParamField>
+
+<ParamField path="name" type="String">
+  Updated subject name.
+</ParamField>
+
+<ParamField path="period" type="String">
+  Updated academic period.
+</ParamField>
+
+<ParamField path="code" type="String">
+  Updated course code.
+</ParamField>
+
+<ParamField path="professorIds" type="[String!]">
+  Replaces the current professor list with the provided user IDs. Pass an empty array to remove all professors.
+</ParamField>
+
+---
+
+## Linking subjects to projects
+
+Projects are linked to subjects by setting the `subjectId` field on `CreateProjectInput` or `UpdateProjectInput`. The `isInstitutional` flag should also be set to `true` to mark the project as academically affiliated.
+
+```graphql
+mutation CreateInstitutionalProject {
+  createProject(input: {
+    name: "ICI4240 Final Project — Team A",
+    isInstitutional: true,
+    subjectId: "clx1sbj0001",
+    methodology: SCRUM,
+    mode: HYBRID
+  }) {
+    id
+    name
+    subjectId
+    isInstitutional
+    subject {
+      name
+      code
+      period
+    }
+  }
+}
+```

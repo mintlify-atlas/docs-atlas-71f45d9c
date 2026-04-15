@@ -1,0 +1,94 @@
+{
+  "projectType": "api-service",
+  "projectName": "PROJEIC Backend",
+  "projectDescription": "A NestJS GraphQL API backend powering PROJEIC, a project management platform for EIC (Engineering Integration Center) that supports both curricular and internal engineering projects.",
+  "theme": "luma",
+  "primaryColor": "#de2850",
+  "lightColor": "#e08cac",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "deployment"]
+          },
+          {
+            "group": "Authentication",
+            "pages": ["auth/overview", "auth/google-oauth", "auth/jwt"]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": ["concepts/projects", "concepts/tasks", "concepts/sprints", "concepts/members"]
+          },
+          {
+            "group": "Features",
+            "pages": ["features/boards", "features/expected-results", "features/notifications", "features/file-uploads", "features/metrics"]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "GraphQL API",
+            "pages": ["api/overview", "api/queries", "api/mutations"]
+          },
+          {
+            "group": "Resources",
+            "pages": ["api/projects", "api/tasks", "api/sprints", "api/users", "api/subjects"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Google OAuth 2.0 authentication with JWT tokens",
+    "GraphQL API built with NestJS and Apollo Server",
+    "Project management with Kanban, Scrum, and Scrumban methodologies",
+    "Task tracking with subtasks, priorities, and assignments",
+    "Sprint planning with burndown charts",
+    "Expected results tracking with evidence upload",
+    "Real-time notifications system",
+    "AWS S3 file uploads with presigned URLs",
+    "Activity logs and audit trail",
+    "Institutional project management tied to university subjects",
+    "PostgreSQL database with Prisma ORM",
+    "Docker containerization support"
+  ],
+  "publicApiSurface": [
+    "Query: findAll(filter: ProjectsFilterInput) — List and filter projects",
+    "Query: myProjects(filter: ProjectsFilterInput) — List current user's projects",
+    "Query: findOne(id: String!) — Get a single project by ID",
+    "Query: tasksByProject(projectId: String!, sprintId: String) — List tasks in a project",
+    "Query: sprintsByProject(projectId: String!) — List sprints in a project",
+    "Query: boardsByProject(projectId: String!) — List boards in a project",
+    "Query: projectMetrics(projectId: String!) — Get project metrics and analytics",
+    "Query: sprintBurndown(sprintId: String!) — Get sprint burndown data",
+    "Query: me — Get authenticated user profile",
+    "Query: myNotifications(unreadOnly: Boolean) — Get user notifications",
+    "Query: activityLogsByProject(projectId: String!) — Get project activity logs",
+    "Query: subjects / subject(id: String!) — List or get academic subjects",
+    "Mutation: createProject(input: CreateProjectInput!) — Create a new project",
+    "Mutation: updateProject(input: UpdateProjectInput!) — Update project details",
+    "Mutation: archiveProject(id: ID!) — Soft-delete a project",
+    "Mutation: deleteProject(id: ID!) — Permanently delete a project",
+    "Mutation: createTask(createTaskInput: CreateTaskInput!) — Create a task",
+    "Mutation: updateTask(updateTaskInput: UpdateTaskInput!) — Update a task",
+    "Mutation: removeTask(id: String!) — Delete a task",
+    "Mutation: createSprint(input: CreateSprintInput!) — Create a sprint",
+    "Mutation: startSprint(id: String!, projectId: String!) — Start a sprint",
+    "Mutation: completeSprint(id: String!) — Complete a sprint",
+    "Mutation: createBoard(createBoardInput: CreateBoardInput!) — Create a board column",
+    "Mutation: addProjectMember(input: AddProjectMemberInput!) — Invite a member",
+    "Mutation: respondToInvitation(accept: Boolean!, projectId: ID!) — Accept/reject invitation",
+    "Mutation: createExpectedResult(input: CreateExpectedResultInput!) — Create expected result",
+    "Mutation: updateResultStatus(input: UpdateResultStatusInput!) — Update result status",
+    "Mutation: getUploadPresignedUrl(contentType: String!, fileName: String!) — Get S3 upload URL",
+    "Mutation: markNotificationAsRead(id: ID!) — Mark notification as read",
+    "GET /projeic/api/auth/google — Initiate Google OAuth flow",
+    "GET /projeic/api/auth/google/callback — OAuth callback endpoint"
+  ]
+}
